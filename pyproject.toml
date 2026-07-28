@@ -1,0 +1,22 @@
+[project]
+name = "portfoy-takip-merkezi"
+version = "1.0.0"
+description = "Free personal portfolio tracking dashboard (Streamlit + yfinance)"
+requires-python = ">=3.11"
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "-q"
+
+[tool.ruff]
+line-length = 100
+target-version = "py311"
+
+[tool.ruff.lint]
+select = ["E", "F", "W", "I", "B", "UP", "S"]
+ignore = ["S101"]  # assert in tests is fine
+
+[tool.ruff.lint.per-file-ignores]
+"portfoy/data.py" = ["BLE001"]
+"portfoy/views/common.py" = ["E501"]  # embedded CSS block
+"portfoy/i18n.py" = ["E501"]          # long human-language templates
