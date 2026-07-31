@@ -1,0 +1,74 @@
+@import "tailwindcss";
+
+/*
+  Deliberately dark-only: this is a trading-terminal-style personal dashboard,
+  not a general SaaS product. Bloomberg/most trading platforms don't offer a
+  light theme either -- traders stare at this for hours, and committing to one
+  disciplined look reads more intentional than a half-hearted light variant.
+*/
+:root {
+  --bg: #08090b;
+  --surface: #111318;
+  --surface-2: #171a21;
+  --border: rgba(255, 255, 255, 0.08);
+  --border-strong: rgba(255, 255, 255, 0.16);
+
+  --text: #eef0f3;
+  --text-dim: #9aa2b1;
+  --text-faint: #5b6272;
+
+  --accent: #ffb020;
+  --accent-soft: rgba(255, 176, 32, 0.12);
+
+  --pos: #34d399;
+  --pos-soft: rgba(52, 211, 153, 0.12);
+  --neg: #f87171;
+  --neg-soft: rgba(248, 113, 113, 0.12);
+}
+
+@theme inline {
+  --color-bg: var(--bg);
+  --color-surface: var(--surface);
+  --color-surface-2: var(--surface-2);
+  --color-border: var(--border);
+  --color-border-strong: var(--border-strong);
+
+  --color-text: var(--text);
+  --color-text-dim: var(--text-dim);
+  --color-text-faint: var(--text-faint);
+
+  --color-accent: var(--accent);
+  --color-accent-soft: var(--accent-soft);
+
+  --color-pos: var(--pos);
+  --color-pos-soft: var(--pos-soft);
+  --color-neg: var(--neg);
+  --color-neg-soft: var(--neg-soft);
+
+  --font-sans: var(--font-geist-sans);
+  --font-mono: var(--font-geist-mono);
+}
+
+* {
+  border-color: var(--border);
+}
+
+html {
+  color-scheme: dark;
+}
+
+body {
+  background: var(--bg);
+  color: var(--text);
+}
+
+::selection {
+  background: var(--accent-soft);
+  color: var(--accent);
+}
+
+/* Tabular figures everywhere numbers line up in a column. */
+.tabular {
+  font-variant-numeric: tabular-nums;
+  font-feature-settings: "tnum" 1;
+}

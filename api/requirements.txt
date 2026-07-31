@@ -1,0 +1,11 @@
+# Scoped to the api/ serverless function only -- deliberately excludes
+# streamlit (its dependency tree is large and unused here; portfoy/data.py
+# and portfoy/news.py no longer import it, see portfoy/cache.py). Vercel's
+# Python builder prefers a requirements.txt next to the entrypoint over the
+# repo-root one used for local Streamlit dev.
+flask>=3.0,<4.0
+yfinance>=1.4,<2.0
+pandas>=3.0,<4.0
+numpy>=2.4,<3.0
+requests>=2.32,<3.0
+defusedxml>=0.7,<1.0

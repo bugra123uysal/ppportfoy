@@ -2,6 +2,7 @@ import json
 
 import pytest
 
+from portfoy import storage
 from portfoy.security import ValidationError
 from portfoy.storage import (
     append_snapshot,
@@ -85,6 +86,37 @@ class TestMutations:
 
     def test_reduce_to_zero_removes(self, pos_aapl):
         assert reduce_position([pos_aapl], "AAPL", 10) == []
+
+
+class TestEnvFallback:
+    """data/ is gitignored, so a git-based deploy (Vercel) never has the
+    file -- PORTFOY_PORTFOLIO_JSON / PORTFOY_HISTORY_JSON substitute."""
+
+    def test_missing_file_falls_back_to_env_json(self, tmp_path, monkeypatch):
+        target = tmp_path / "portfolio.json"
+        monkeypatch.setitem(storage._ENV_FALLBACKS, target, "PORTFOY_TEST_JSON")
+        monkeypatch.setenv("PORTFOY_TEST_JSON", json.dumps({
+            "positions": [{"symbol": "AAPL", "quantity": 10, "avg_cost": 150.0,
+                           "currency": "USD", "added": "2026-01-01", "notes": ""}],
+            "cash": [],
+        }))
+        assert [p.symbol for p in load_portfolio(target)] == ["AAPL"]
+
+    def test_missing_file_without_env_var_stays_empty(self, tmp_path):
+        assert load_portfolio(tmp_path / "nope2.json") == []
+
+    def test_invalid_env_json_falls_back_to_empty(self, tmp_path, monkeypatch):
+        target = tmp_path / "portfolio.json"
+        monkeypatch.setitem(storage._ENV_FALLBACKS, target, "PORTFOY_TEST_JSON")
+        monkeypatch.setenv("PORTFOY_TEST_JSON", "{not json")
+        assert load_portfolio(target) == []
+
+    def test_existing_file_takes_priority_over_env(self, tmp_path, monkeypatch, pos_aapl):
+        target = tmp_path / "portfolio.json"
+        save_portfolio([pos_aapl], target)
+        monkeypatch.setitem(storage._ENV_FALLBACKS, target, "PORTFOY_TEST_JSON")
+        monkeypatch.setenv("PORTFOY_TEST_JSON", json.dumps({"positions": [], "cash": []}))
+        assert [p.symbol for p in load_portfolio(target)] == ["AAPL"]
 
 
 class TestHistory:

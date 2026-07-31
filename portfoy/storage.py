@@ -12,6 +12,12 @@ Demo mode (``PORTFOY_DEMO=1``): for public deployments nothing touches the
 disk. Each visitor gets an isolated, session-only copy seeded with an example
 portfolio, so a shared instance never exposes or mixes anyone's data and
 ephemeral cloud filesystems stop mattering.
+
+Serverless fallback (``PORTFOY_PORTFOLIO_JSON`` / ``PORTFOY_HISTORY_JSON``):
+``data/`` is gitignored, so a platform that deploys from git (Vercel) never
+has the on-disk file to read. When the file is missing, these env vars --
+holding the same JSON the file would -- are read instead. Lets the read-only
+API serve real data without ever committing it to source control.
 """
 
 from __future__ import annotations
@@ -279,6 +285,12 @@ def _positions_payload(raw: object) -> list:
     return []
 
 
+_ENV_FALLBACKS = {
+    config.PORTFOLIO_FILE: "PORTFOY_PORTFOLIO_JSON",
+    config.HISTORY_FILE: "PORTFOY_HISTORY_JSON",
+}
+
+
 def _read_json(path: Path) -> object:
     store = _session_store()
     if store is not None:
@@ -287,8 +299,21 @@ def _read_json(path: Path) -> object:
         with open(path, encoding="utf-8") as fh:
             return json.load(fh)
     except FileNotFoundError:
-        return None
+        return _env_fallback(path)
     except (json.JSONDecodeError, OSError, UnicodeDecodeError):
+        return None
+
+
+def _env_fallback(path: Path) -> object:
+    var = _ENV_FALLBACKS.get(path)
+    if var is None:
+        return None
+    raw = os.environ.get(var, "").strip()
+    if not raw:
+        return None
+    try:
+        return json.loads(raw)
+    except json.JSONDecodeError:
         return None
 
 

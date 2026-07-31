@@ -1,0 +1,17 @@
+{
+  "services": {
+    "web": {
+      "root": "web/",
+      "bindings": [
+        { "type": "service", "service": "api", "format": "url", "env": "PORTFOY_API_URL" }
+      ]
+    },
+    "api": {
+      "root": ".",
+      "entrypoint": "api.index:app"
+    }
+  },
+  "rewrites": [
+    { "source": "/(.*)", "destination": { "service": "web" } }
+  ]
+}

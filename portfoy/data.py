@@ -1,20 +1,24 @@
 """Market data access via yfinance (free, no API key).
 
-Everything is cached with Streamlit's cache and wrapped defensively:
-Yahoo endpoints fail or change shape regularly, so every function
-degrades to None / empty instead of raising into the UI.
+Everything is cached (see portfoy.cache -- in-process for Streamlit/tests,
+Upstash Redis for the Vercel API) and wrapped defensively: Yahoo endpoints
+fail or change shape regularly, so every function degrades to None / empty
+instead of raising into the caller.
 """
 
 from __future__ import annotations
 
+import io
+import json
 from datetime import date, datetime, timedelta
 from typing import NamedTuple
 
 import pandas as pd
-import streamlit as st
 import yfinance as yf
 
 from . import config
+from .cache import cached
+from .serialize import to_jsonable
 
 
 class Quote(NamedTuple):
@@ -24,7 +28,45 @@ class Quote(NamedTuple):
     change_pct: float
 
 
-@st.cache_data(ttl=config.HISTORY_CACHE_TTL, show_spinner=False)
+def _encode_price_frame(df: pd.DataFrame) -> str:
+    return df.to_json(orient="split", date_format="iso")
+
+
+def _decode_price_frame(raw: str) -> pd.DataFrame:
+    df = pd.read_json(io.StringIO(raw), orient="split")
+    df.index = pd.to_datetime(df.index)
+    return df
+
+
+def _encode_quotes(quotes: dict[str, Quote]) -> str:
+    return json.dumps({sym: list(q) for sym, q in quotes.items()})
+
+
+def _decode_quotes(raw: str) -> dict[str, Quote]:
+    return {sym: Quote(*values) for sym, values in json.loads(raw).items()}
+
+
+def _encode_date(value: date | None) -> str:
+    return value.isoformat() if value else ""
+
+
+def _decode_date(raw: str) -> date | None:
+    return date.fromisoformat(raw) if raw else None
+
+
+def _encode_activity(activity: object) -> str:
+    return "" if activity is None else json.dumps(to_jsonable(activity))
+
+
+def _decode_activity(raw: str):
+    if not raw:
+        return None
+    from .options import OptionActivity
+
+    return OptionActivity(**json.loads(raw))
+
+
+@cached(ttl=config.HISTORY_CACHE_TTL, encode=_encode_price_frame, decode=_decode_price_frame)
 def get_history(symbol: str, period: str = config.DEFAULT_HISTORY_PERIOD) -> pd.DataFrame:
     """Daily OHLCV history. Empty DataFrame on any failure."""
     try:
@@ -39,7 +81,7 @@ def get_history(symbol: str, period: str = config.DEFAULT_HISTORY_PERIOD) -> pd.
     return df.dropna(subset=["Close"])
 
 
-@st.cache_data(ttl=config.QUOTE_CACHE_TTL, show_spinner=False)
+@cached(ttl=config.QUOTE_CACHE_TTL, encode=_encode_quotes, decode=_decode_quotes)
 def get_quotes(symbols: tuple[str, ...]) -> dict[str, Quote]:
     """Batch quotes derived from 5 days of closes (robust across yf versions)."""
     if not symbols:
@@ -69,7 +111,7 @@ def get_quotes(symbols: tuple[str, ...]) -> dict[str, Quote]:
     return quotes
 
 
-@st.cache_data(ttl=config.ROTATION_CACHE_TTL, show_spinner=False)
+@cached(ttl=config.ROTATION_CACHE_TTL, encode=_encode_price_frame, decode=_decode_price_frame)
 def get_weekly_closes(symbols: tuple[str, ...], period: str = config.RRG_PERIOD) -> pd.DataFrame:
     """Weekly closing prices for several symbols, one column per symbol."""
     if not symbols:
@@ -95,13 +137,13 @@ def get_weekly_closes(symbols: tuple[str, ...], period: str = config.RRG_PERIOD)
     return pd.DataFrame(columns) if columns else pd.DataFrame()
 
 
-@st.cache_data(ttl=config.QUOTE_CACHE_TTL, show_spinner=False)
+@cached(ttl=config.QUOTE_CACHE_TTL)
 def get_usdtry() -> float | None:
     q = get_quotes((config.FX_USDTRY,)).get(config.FX_USDTRY)
     return q.price if q and q.price > 0 else None
 
 
-@st.cache_data(ttl=config.QUOTE_CACHE_TTL, show_spinner=False)
+@cached(ttl=config.QUOTE_CACHE_TTL)
 def get_macro_snapshot() -> list[dict]:
     """Quotes for the macro strip, in config order."""
     quotes = get_quotes(tuple(config.MACRO_TICKERS))
@@ -114,7 +156,7 @@ def get_macro_snapshot() -> list[dict]:
     return out
 
 
-@st.cache_data(ttl=config.HISTORY_CACHE_TTL, show_spinner=False)
+@cached(ttl=config.HISTORY_CACHE_TTL, encode=_encode_date, decode=_decode_date)
 def get_next_earnings(symbol: str) -> date | None:
     """Next earnings date if Yahoo exposes one. None otherwise."""
     try:
@@ -136,7 +178,7 @@ def get_next_earnings(symbol: str) -> date | None:
     return None
 
 
-@st.cache_data(ttl=config.BREADTH_CACHE_TTL, show_spinner=False)
+@cached(ttl=config.BREADTH_CACHE_TTL, encode=_encode_price_frame, decode=_decode_price_frame)
 def get_daily_closes(symbols: tuple[str, ...], period: str = "1y") -> pd.DataFrame:
     """Daily closes for many symbols, one column per symbol (breadth input)."""
     if not symbols:
@@ -162,7 +204,7 @@ def get_daily_closes(symbols: tuple[str, ...], period: str = "1y") -> pd.DataFra
     return pd.DataFrame(columns) if columns else pd.DataFrame()
 
 
-@st.cache_data(ttl=config.OPTIONS_CACHE_TTL, show_spinner=False)
+@cached(ttl=config.OPTIONS_CACHE_TTL, encode=_encode_activity, decode=_decode_activity)
 def get_option_activity(symbol: str):
     """Aggregated option activity for the nearest expiry. None when no chain."""
     from .options import aggregate_chain, build_activity

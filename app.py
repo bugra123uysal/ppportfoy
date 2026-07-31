@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import streamlit as st
 
-from portfoy import config, data, risk, storage
+from portfoy import cache, config, data, risk, storage
 from portfoy.i18n import t
 from portfoy.views import (
     alerts_page,
@@ -70,7 +70,7 @@ def main() -> None:
         )
         st.divider()
         if st.button(t("refresh", lang), use_container_width=True):
-            st.cache_data.clear()
+            cache.clear_all()
             st.rerun()
         st.caption(t("last_update", lang))
         st.caption(t("disclaimer", lang))

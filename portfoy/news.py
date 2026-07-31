@@ -2,24 +2,36 @@
 
 No API keys. RSS XML is parsed with defusedxml to stay safe against
 malicious XML (entity expansion attacks), and every link is checked
-with is_safe_url before it reaches the UI.
+with is_safe_url before it reaches the caller.
 """
 
 from __future__ import annotations
 
+import json
 from datetime import UTC, datetime
 from email.utils import parsedate_to_datetime
 
 import requests
-import streamlit as st
 import yfinance as yf
 from defusedxml import ElementTree as SafeET
 
 from . import config
+from .cache import cached
 from .security import is_safe_url
 
 
-@st.cache_data(ttl=config.NEWS_CACHE_TTL, show_spinner=False)
+def _encode_news(items: list[dict]) -> str:
+    return json.dumps([{**item, "published": item["published"].isoformat()} for item in items])
+
+
+def _decode_news(raw: str) -> list[dict]:
+    items = json.loads(raw)
+    for item in items:
+        item["published"] = datetime.fromisoformat(item["published"])
+    return items
+
+
+@cached(ttl=config.NEWS_CACHE_TTL, encode=_encode_news, decode=_decode_news)
 def get_news_for(symbol: str, lang: str = "tr") -> list[dict]:
     """Merged, deduplicated, newest-first news list for one symbol."""
     items = _yahoo_news(symbol) + _google_news(symbol, lang)

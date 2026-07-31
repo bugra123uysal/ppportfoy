@@ -1,0 +1,16 @@
+export interface NavItem {
+  href: string;
+  label: string;
+  glyph: string;
+}
+
+export const NAV_ITEMS: NavItem[] = [
+  { href: "/", label: "Genel Bakış", glyph: "◉" },
+  { href: "/piyasa", label: "Piyasa Pusulası", glyph: "◈" },
+  { href: "/pozisyonlar", label: "Pozisyonlar", glyph: "▤" },
+  { href: "/risk", label: "Risk & Uyarılar", glyph: "▲" },
+  { href: "/karsilastirma", label: "Getiri Karşılaştırma", glyph: "∿" },
+  { href: "/rotasyon", label: "Sektör Rotasyonu", glyph: "◎" },
+  { href: "/opsiyon", label: "Opsiyon Radarı", glyph: "◐" },
+  { href: "/haberler", label: "Haberler", glyph: "▦" },
+];
