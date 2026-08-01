@@ -1,4 +1,5 @@
 import { LoginForm } from "./login-form";
+import { safeRedirectTarget } from "@/lib/safe-redirect";
 
 export default async function LoginPage({
   searchParams,
@@ -19,7 +20,7 @@ export default async function LoginPage({
             <p className="text-xs text-text-faint">Özel panel</p>
           </div>
         </div>
-        <LoginForm from={from && from.startsWith("/") ? from : "/"} />
+        <LoginForm from={safeRedirectTarget(from)} />
       </div>
     </main>
   );

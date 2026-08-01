@@ -42,7 +42,10 @@ def _authorized() -> bool:
     expected = os.environ.get("PORTFOY_API_KEY", "").strip()
     if not expected:
         return False  # no key configured -- fail closed, never serve unauthenticated
-    supplied = request.headers.get("X-API-Key") or request.args.get("api_key") or ""
+    # Header only, deliberately -- a query-string fallback would let the key
+    # leak into access/proxy logs and browser history for no benefit (the
+    # only caller, web/src/lib/api.ts, always sends the header).
+    supplied = request.headers.get("X-API-Key") or ""
     return hmac.compare_digest(supplied, expected)
 
 

@@ -46,10 +46,10 @@ class TestAuth:
         monkeypatch.setattr(api_index.api_data, "macro_payload", lambda: [])
         assert client.get("/api/market/macro", headers=AUTH).status_code == 200
 
-    def test_correct_query_param_key_authorizes(self, client, monkeypatch):
-        monkeypatch.setattr(api_index.api_data, "macro_payload", lambda: [])
+    def test_query_param_key_alone_does_not_authorize(self, client):
+        """Header only, deliberately -- see api/index.py's _authorized docstring."""
         resp = client.get(f"/api/market/macro?api_key={API_KEY}")
-        assert resp.status_code == 200
+        assert resp.status_code == 401
 
     def test_unconfigured_key_fails_closed(self, client, monkeypatch):
         monkeypatch.delenv("PORTFOY_API_KEY", raising=False)
