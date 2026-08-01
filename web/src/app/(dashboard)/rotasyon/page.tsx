@@ -164,13 +164,16 @@ function SectorLeaders({
     return <p className="text-sm text-text-faint">Veri yok.</p>;
   }
   return (
-    <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
+    <div className="flex flex-col divide-y divide-border/60">
       {withLeaders.map((sector) => (
-        <div key={sector.symbol} className="rounded-lg border border-border p-3">
-          <p className="mb-2 text-xs font-medium text-text-dim">
-            {sector.symbol} · {sector.label_tr}
-          </p>
-          <ul className="flex flex-col gap-1">
+        <details key={sector.symbol} className="group py-2.5 first:pt-0 last:pb-0">
+          <summary className="flex cursor-pointer list-none items-center justify-between text-sm">
+            <span className="font-medium text-text">
+              {sector.symbol} <span className="text-text-faint">· {sector.label_tr}</span>
+            </span>
+            <span className="text-text-faint transition-transform group-open:rotate-90">›</span>
+          </summary>
+          <ul className="mt-2 flex flex-col gap-1 pl-1">
             {leaders[sector.symbol].map((leader, i) => (
               <li key={leader.symbol} className="flex items-center justify-between text-sm">
                 <span className="text-text">
@@ -183,7 +186,7 @@ function SectorLeaders({
               </li>
             ))}
           </ul>
-        </div>
+        </details>
       ))}
     </div>
   );
