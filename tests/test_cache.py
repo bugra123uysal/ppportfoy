@@ -167,6 +167,26 @@ class TestBackendSelection:
         set_backend(None)
         assert isinstance(get_backend(), InProcessBackend)
 
+    def test_selects_upstash_from_vercel_kv_env_names(self, monkeypatch):
+        """The Vercel Marketplace 'Upstash for Redis' integration provisions
+        KV_REST_API_URL/TOKEN, not the UPSTASH_REDIS_REST_* names."""
+        monkeypatch.delenv("UPSTASH_REDIS_REST_URL", raising=False)
+        monkeypatch.delenv("UPSTASH_REDIS_REST_TOKEN", raising=False)
+        monkeypatch.setenv("KV_REST_API_URL", "https://example.upstash.io")
+        monkeypatch.setenv("KV_REST_API_TOKEN", "secret-token")
+        set_backend(None)
+        assert isinstance(get_backend(), UpstashBackend)
+
+    def test_upstash_env_names_take_priority_over_kv_names(self, monkeypatch):
+        monkeypatch.setenv("UPSTASH_REDIS_REST_URL", "https://upstash-name.upstash.io")
+        monkeypatch.setenv("UPSTASH_REDIS_REST_TOKEN", "upstash-token")
+        monkeypatch.setenv("KV_REST_API_URL", "https://kv-name.upstash.io")
+        monkeypatch.setenv("KV_REST_API_TOKEN", "kv-token")
+        set_backend(None)
+        backend = get_backend()
+        assert isinstance(backend, UpstashBackend)
+        assert backend._url == "https://upstash-name.upstash.io"
+
 
 class TestCustomCodec:
     def test_custom_encode_decode_used(self):

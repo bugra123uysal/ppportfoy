@@ -5,8 +5,11 @@ Vercel Python functions are stateless between invocations, so an in-process
 dict does not survive a cold start the way it does inside Streamlit's
 long-running server. Upstash's Redis REST API does. The backend is picked
 automatically: Upstash when ``UPSTASH_REDIS_REST_URL`` /
-``UPSTASH_REDIS_REST_TOKEN`` are set, otherwise an in-process dict (correct
-for Streamlit, and for local dev/tests where no Upstash project exists yet).
+``UPSTASH_REDIS_REST_TOKEN`` are set (the historical naming) or, failing
+that, ``KV_REST_API_URL`` / ``KV_REST_API_TOKEN`` (what the current Vercel
+Marketplace "Upstash for Redis" integration actually provisions), otherwise
+an in-process dict (correct for Streamlit, and for local dev/tests where no
+Upstash project exists yet).
 
 Caching is a performance optimization, never a correctness dependency: any
 backend failure (network error, corrupt entry) is swallowed and the wrapped
@@ -103,8 +106,12 @@ def get_backend() -> CacheBackend:
     global _backend
     if _backend is not None:
         return _backend
-    url = os.environ.get("UPSTASH_REDIS_REST_URL", "").strip()
-    token = os.environ.get("UPSTASH_REDIS_REST_TOKEN", "").strip()
+    url = os.environ.get("UPSTASH_REDIS_REST_URL", "").strip() or os.environ.get(
+        "KV_REST_API_URL", ""
+    ).strip()
+    token = os.environ.get("UPSTASH_REDIS_REST_TOKEN", "").strip() or os.environ.get(
+        "KV_REST_API_TOKEN", ""
+    ).strip()
     _backend = UpstashBackend(url, token) if url and token else InProcessBackend()
     return _backend
 
