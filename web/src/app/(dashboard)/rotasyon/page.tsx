@@ -30,8 +30,12 @@ export default async function RotationPage({
   const includeMine = mine === "1";
   const { sectors: points, leaders } = await getRotation(includeMine);
   const movers = points.filter((p) => p.quadrant !== p.prev_quadrant);
+  // Rotation candidates are always sectors, never the user's own holdings --
+  // "rotate into" only makes sense between sectors, even when "Holdinglerimi
+  // de göster" overlays individual stocks on the map.
+  const sectorSymbols = new Set(Object.keys(leaders));
   const candidates = points
-    .filter((p) => ROTATE_IN_QUADRANTS.has(p.quadrant))
+    .filter((p) => sectorSymbols.has(p.symbol) && ROTATE_IN_QUADRANTS.has(p.quadrant))
     .sort((a, b) => currentY(b) - currentY(a));
   const topPick = candidates[0];
   const runnerUps = candidates.slice(1, 3);
