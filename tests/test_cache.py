@@ -2,7 +2,14 @@ from __future__ import annotations
 
 import pytest
 
-from portfoy.cache import InProcessBackend, UpstashBackend, cached, get_backend, set_backend
+from portfoy.cache import (
+    InProcessBackend,
+    UpstashBackend,
+    cached,
+    get_backend,
+    get_persistent_backend,
+    set_backend,
+)
 
 
 class FakeClock:
@@ -186,6 +193,54 @@ class TestBackendSelection:
         backend = get_backend()
         assert isinstance(backend, UpstashBackend)
         assert backend._url == "https://upstash-name.upstash.io"
+
+
+class TestPersistentBackend:
+    def test_none_when_upstash_not_configured(self, monkeypatch):
+        monkeypatch.delenv("UPSTASH_REDIS_REST_URL", raising=False)
+        monkeypatch.delenv("UPSTASH_REDIS_REST_TOKEN", raising=False)
+        monkeypatch.delenv("KV_REST_API_URL", raising=False)
+        monkeypatch.delenv("KV_REST_API_TOKEN", raising=False)
+        assert get_persistent_backend() is None
+
+    def test_never_falls_back_to_in_process(self, monkeypatch):
+        """Unlike get_backend(), a missing config must not silently degrade
+        to InProcessBackend -- that would make a write look like it
+        succeeded and then vanish on the next cold start."""
+        monkeypatch.delenv("UPSTASH_REDIS_REST_URL", raising=False)
+        monkeypatch.delenv("UPSTASH_REDIS_REST_TOKEN", raising=False)
+        monkeypatch.delenv("KV_REST_API_URL", raising=False)
+        monkeypatch.delenv("KV_REST_API_TOKEN", raising=False)
+        backend = get_persistent_backend()
+        assert not isinstance(backend, InProcessBackend)
+
+    def test_returns_upstash_backend_when_configured(self, monkeypatch):
+        monkeypatch.setenv("UPSTASH_REDIS_REST_URL", "https://example.upstash.io")
+        monkeypatch.setenv("UPSTASH_REDIS_REST_TOKEN", "secret-token")
+        backend = get_persistent_backend()
+        assert isinstance(backend, UpstashBackend)
+
+
+class TestUpstashSetForever:
+    def test_sends_no_expiry_param(self, monkeypatch):
+        captured = {}
+
+        class FakeResponse:
+            def __enter__(self):
+                return self
+
+            def __exit__(self, *exc):
+                return False
+
+        def fake_urlopen(request, timeout):
+            captured["url"] = request.full_url
+            return FakeResponse()
+
+        monkeypatch.setattr("portfoy.cache.urllib.request.urlopen", fake_urlopen)
+        backend = UpstashBackend("https://example.upstash.io", "token")
+        backend.set_forever("mykey", "myvalue")
+        assert "EX=" not in captured["url"]
+        assert captured["url"] == "https://example.upstash.io/set/mykey/myvalue"
 
 
 class TestCustomCodec:

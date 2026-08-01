@@ -16,8 +16,18 @@ ephemeral cloud filesystems stop mattering.
 Serverless fallback (``PORTFOY_PORTFOLIO_JSON`` / ``PORTFOY_HISTORY_JSON``):
 ``data/`` is gitignored, so a platform that deploys from git (Vercel) never
 has the on-disk file to read. When the file is missing, these env vars --
-holding the same JSON the file would -- are read instead. Lets the read-only
-API serve real data without ever committing it to source control.
+holding the same JSON the file would -- are read instead, seeding the very
+first read before anything has been written to persistent storage.
+
+Persistent storage on Vercel (Upstash, via ``cache.get_persistent_backend()``):
+Vercel's function filesystem is read-only outside ``/tmp``, and ``/tmp``
+itself isn't kept between invocations, so writes (adding/removing a
+position from the web app) cannot go to a local file there. When Upstash is
+configured, reads and writes both go through it instead of the local file --
+Upstash always wins over the env-var seed once something has actually been
+written, since it reflects the current mutable state. Local/Streamlit use is
+unaffected: Upstash env vars are never set in that environment, so this
+module falls straight back to plain file I/O, unchanged.
 """
 
 from __future__ import annotations
@@ -30,7 +40,7 @@ from dataclasses import asdict, dataclass, replace
 from datetime import UTC, date, datetime
 from pathlib import Path
 
-from . import config
+from . import cache, config
 from .security import (
     ValidationError,
     normalize_symbol,
@@ -290,17 +300,62 @@ _ENV_FALLBACKS = {
     config.HISTORY_FILE: "PORTFOY_HISTORY_JSON",
 }
 
+_PERSISTENT_KEYS = {
+    config.PORTFOLIO_FILE: "portfoy:storage:portfolio",
+    config.HISTORY_FILE: "portfoy:storage:history",
+}
+
+
+def can_persist() -> bool:
+    """True when a write made right now will actually survive.
+
+    Local/Streamlit use always has a writable working directory, so this is
+    only False in the one case that matters: running on Vercel (a read-only
+    filesystem outside /tmp, which itself isn't kept between invocations)
+    without Upstash configured to take writes instead. Callers that mutate
+    storage (e.g. the API's add/remove-position routes) should check this
+    first and fail with a clear error rather than let an unwritable-
+    filesystem OSError surface as a generic 500.
+    """
+    if is_demo():
+        return True
+    if cache.get_persistent_backend() is not None:
+        return True
+    return os.environ.get("VERCEL", "").strip() != "1"
+
 
 def _read_json(path: Path) -> object:
     store = _session_store()
     if store is not None:
         return store.get(str(path))
+    persistent = _persistent_value(path)
+    if persistent is not None:
+        return persistent
     try:
         with open(path, encoding="utf-8") as fh:
             return json.load(fh)
     except FileNotFoundError:
         return _env_fallback(path)
     except (json.JSONDecodeError, OSError, UnicodeDecodeError):
+        return None
+
+
+def _persistent_value(path: Path) -> object:
+    key = _PERSISTENT_KEYS.get(path)
+    if key is None:
+        return None
+    backend = cache.get_persistent_backend()
+    if backend is None:
+        return None
+    try:
+        raw = backend.get(key)
+    except Exception:
+        return None
+    if raw is None:
+        return None
+    try:
+        return json.loads(raw)
+    except json.JSONDecodeError:
         return None
 
 
@@ -322,6 +377,12 @@ def _write_json_atomic(path: Path, payload: object) -> None:
     if store is not None:
         store[str(path)] = payload
         return
+    key = _PERSISTENT_KEYS.get(path)
+    if key is not None:
+        backend = cache.get_persistent_backend()
+        if backend is not None:
+            backend.set_forever(key, json.dumps(payload, ensure_ascii=False))
+            return
     path.parent.mkdir(parents=True, exist_ok=True)
     fd, tmp_name = tempfile.mkstemp(dir=path.parent, suffix=".tmp")
     try:

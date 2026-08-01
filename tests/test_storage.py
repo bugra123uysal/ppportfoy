@@ -127,3 +127,97 @@ class TestHistory:
         assert len(history) == 1
         assert history[0]["value_try"] == 200.0
         assert load_history(path) == history
+
+
+class FakePersistentBackend:
+    """In-memory stand-in for cache.UpstashBackend, so storage's persistent
+    path can be tested without a real Upstash project."""
+
+    def __init__(self):
+        self.store: dict[str, str] = {}
+
+    def get(self, key):
+        return self.store.get(key)
+
+    def set_forever(self, key, value):
+        self.store[key] = value
+
+
+class TestPersistentStorage:
+    """When Upstash is configured, reads/writes to the portfolio/history
+    file paths go through it instead of local disk -- this is what makes
+    add/remove-position durable on Vercel's read-only filesystem.
+
+    Uses a tmp_path target registered into storage._PERSISTENT_KEYS (same
+    pattern TestEnvFallback uses for _ENV_FALLBACKS) rather than the real
+    config.PORTFOLIO_FILE, since a real data/portfolio.json exists on disk
+    in local dev and would otherwise leak into these assertions.
+    """
+
+    def test_write_then_read_round_trips_through_backend(self, tmp_path, monkeypatch, pos_aapl):
+        target = tmp_path / "portfolio.json"
+        monkeypatch.setitem(storage._PERSISTENT_KEYS, target, "test:persistent:key")
+        backend = FakePersistentBackend()
+        monkeypatch.setattr(storage.cache, "get_persistent_backend", lambda: backend)
+        save_portfolio([pos_aapl], target)
+        assert load_portfolio(target) == [pos_aapl]
+        assert backend.store  # something was actually written
+
+    def test_persistent_value_wins_over_env_fallback(self, tmp_path, monkeypatch, pos_aapl):
+        target = tmp_path / "portfolio.json"
+        monkeypatch.setitem(storage._PERSISTENT_KEYS, target, "test:persistent:key")
+        monkeypatch.setitem(storage._ENV_FALLBACKS, target, "PORTFOY_TEST_JSON")
+        backend = FakePersistentBackend()
+        monkeypatch.setattr(storage.cache, "get_persistent_backend", lambda: backend)
+        monkeypatch.setenv("PORTFOY_TEST_JSON", json.dumps({"positions": [], "cash": []}))
+        save_portfolio([pos_aapl], target)
+        assert [p.symbol for p in load_portfolio(target)] == ["AAPL"]
+
+    def test_falls_back_to_env_seed_before_first_write(self, tmp_path, monkeypatch):
+        target = tmp_path / "portfolio.json"
+        monkeypatch.setitem(storage._PERSISTENT_KEYS, target, "test:persistent:key")
+        monkeypatch.setitem(storage._ENV_FALLBACKS, target, "PORTFOY_TEST_JSON")
+        backend = FakePersistentBackend()
+        monkeypatch.setattr(storage.cache, "get_persistent_backend", lambda: backend)
+        monkeypatch.setenv(
+            "PORTFOY_TEST_JSON",
+            json.dumps({
+                "positions": [{"symbol": "AAPL", "quantity": 10, "avg_cost": 150.0,
+                               "currency": "USD", "added": "2026-01-01", "notes": ""}],
+                "cash": [],
+            }),
+        )
+        assert [p.symbol for p in load_portfolio(target)] == ["AAPL"]
+
+    def test_backend_read_failure_falls_back_gracefully(self, tmp_path, monkeypatch):
+        target = tmp_path / "portfolio.json"
+        monkeypatch.setitem(storage._PERSISTENT_KEYS, target, "test:persistent:key")
+
+        class BrokenBackend:
+            def get(self, key):
+                raise ConnectionError("unreachable")
+
+        monkeypatch.setattr(storage.cache, "get_persistent_backend", lambda: BrokenBackend())
+        assert load_portfolio(target) == []
+
+
+class TestCanPersist:
+    def test_true_when_upstash_configured(self, monkeypatch):
+        monkeypatch.setattr(storage.cache, "get_persistent_backend", lambda: object())
+        assert storage.can_persist() is True
+
+    def test_true_locally_without_upstash(self, monkeypatch):
+        monkeypatch.setattr(storage.cache, "get_persistent_backend", lambda: None)
+        monkeypatch.delenv("VERCEL", raising=False)
+        assert storage.can_persist() is True
+
+    def test_false_on_vercel_without_upstash(self, monkeypatch):
+        monkeypatch.setattr(storage.cache, "get_persistent_backend", lambda: None)
+        monkeypatch.setenv("VERCEL", "1")
+        assert storage.can_persist() is False
+
+    def test_true_in_demo_mode_even_on_vercel_without_upstash(self, monkeypatch):
+        monkeypatch.setattr(storage.cache, "get_persistent_backend", lambda: None)
+        monkeypatch.setenv("VERCEL", "1")
+        monkeypatch.setenv("PORTFOY_DEMO", "1")
+        assert storage.can_persist() is True

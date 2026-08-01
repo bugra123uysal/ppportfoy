@@ -144,10 +144,27 @@ export interface SeriesResult {
   series: { dates: string[]; values: (number | null)[] };
 }
 
+export interface AddPositionInput {
+  symbol: string;
+  quantity: number;
+  avg_cost: number;
+  notes?: string;
+}
+
 class ApiError extends Error {
   constructor(
     public readonly path: string,
     public readonly status: number,
+  ) {
+    super(`portfoy API ${path} responded ${status}`);
+  }
+}
+
+export class ApiMutationError extends Error {
+  constructor(
+    public readonly path: string,
+    public readonly status: number,
+    public readonly body: unknown,
   ) {
     super(`portfoy API ${path} responded ${status}`);
   }
@@ -218,4 +235,35 @@ export function getNews(symbol: string, lang = "tr"): Promise<NewsItem[]> {
 
 export function getCompare(period: string, base: "TRY" | "USD"): Promise<SeriesResult[]> {
   return apiGet<SeriesResult[]>(`/api/compare?period=${period}&base=${base}`, 900);
+}
+
+async function apiMutate<T>(path: string, init: RequestInit): Promise<T> {
+  const base = process.env.PORTFOY_API_URL;
+  const key = process.env.PORTFOY_API_KEY;
+  if (!base || !key) {
+    throw new Error("PORTFOY_API_URL / PORTFOY_API_KEY are not configured");
+  }
+  const res = await fetch(new URL(path, base), {
+    ...init,
+    headers: { "X-API-Key": key, "Content-Type": "application/json" },
+    cache: "no-store",
+  });
+  const body: unknown = await res.json().catch(() => null);
+  if (!res.ok) {
+    throw new ApiMutationError(path, res.status, body);
+  }
+  return body as T;
+}
+
+export function addPosition(input: AddPositionInput): Promise<PositionsPayload> {
+  return apiMutate<PositionsPayload>("/api/positions", {
+    method: "POST",
+    body: JSON.stringify(input),
+  });
+}
+
+export function removePosition(symbol: string): Promise<PositionsPayload> {
+  return apiMutate<PositionsPayload>(`/api/positions/${encodeURIComponent(symbol)}`, {
+    method: "DELETE",
+  });
 }

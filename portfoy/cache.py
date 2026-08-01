@@ -97,8 +97,35 @@ class UpstashBackend:
         with urllib.request.urlopen(request, timeout=self._timeout):  # noqa: S310
             pass
 
+    def set_forever(self, key: str, value: str) -> None:
+        """Like set(), but with no TTL -- for data that is the source of
+        truth (see portfoy.storage), not a cache entry meant to expire."""
+        quoted_key = urllib.parse.quote(key, safe="")
+        quoted_value = urllib.parse.quote(value, safe="")
+        request = urllib.request.Request(  # noqa: S310 -- self._url is our own configured endpoint, not user input
+            f"{self._url}/set/{quoted_key}/{quoted_value}",
+            headers={"Authorization": f"Bearer {self._token}"},
+            method="POST",
+        )
+        with urllib.request.urlopen(request, timeout=self._timeout):  # noqa: S310
+            pass
+
 
 _backend: CacheBackend | None = None
+
+
+def _upstash_credentials() -> tuple[str, str] | None:
+    """(url, token) from the environment, or None when Upstash isn't
+    configured. Checks both the historical UPSTASH_REDIS_REST_* names and
+    the KV_REST_API_* names the current Vercel Marketplace "Upstash for
+    Redis" integration actually provisions."""
+    url = os.environ.get("UPSTASH_REDIS_REST_URL", "").strip() or os.environ.get(
+        "KV_REST_API_URL", ""
+    ).strip()
+    token = os.environ.get("UPSTASH_REDIS_REST_TOKEN", "").strip() or os.environ.get(
+        "KV_REST_API_TOKEN", ""
+    ).strip()
+    return (url, token) if url and token else None
 
 
 def get_backend() -> CacheBackend:
@@ -106,14 +133,21 @@ def get_backend() -> CacheBackend:
     global _backend
     if _backend is not None:
         return _backend
-    url = os.environ.get("UPSTASH_REDIS_REST_URL", "").strip() or os.environ.get(
-        "KV_REST_API_URL", ""
-    ).strip()
-    token = os.environ.get("UPSTASH_REDIS_REST_TOKEN", "").strip() or os.environ.get(
-        "KV_REST_API_TOKEN", ""
-    ).strip()
-    _backend = UpstashBackend(url, token) if url and token else InProcessBackend()
+    creds = _upstash_credentials()
+    _backend = UpstashBackend(*creds) if creds else InProcessBackend()
     return _backend
+
+
+def get_persistent_backend() -> UpstashBackend | None:
+    """An Upstash-backed store for data that must survive across serverless
+    invocations (see portfoy.storage), or None when Upstash isn't
+    configured -- callers must fall back to another durable store (a local
+    file) rather than silently losing writes. Unlike get_backend(), this
+    never falls back to InProcessBackend: an in-process dict would make a
+    write look like it succeeded and then vanish on the next cold start.
+    """
+    creds = _upstash_credentials()
+    return UpstashBackend(*creds) if creds else None
 
 
 def set_backend(backend: CacheBackend | None) -> None:

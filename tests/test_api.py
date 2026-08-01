@@ -188,6 +188,88 @@ class TestRouteWiring:
         assert client.get("/api/compare?base=try", headers=AUTH).status_code == 200
 
 
+class TestAddPosition:
+    def test_persists_and_returns_updated_positions(self, client, monkeypatch):
+        captured = {}
+        monkeypatch.setattr(api_index.storage, "can_persist", lambda: True)
+        monkeypatch.setattr(api_index.storage, "load_portfolio", lambda: [])
+        monkeypatch.setattr(
+            api_index.storage, "make_position",
+            lambda symbol, qty, cost, notes="": {"symbol": symbol},
+        )
+        monkeypatch.setattr(
+            api_index.storage, "upsert_position", lambda positions, new: [new],
+        )
+        monkeypatch.setattr(
+            api_index.storage, "save_portfolio",
+            lambda positions: captured.setdefault("saved", positions),
+        )
+        monkeypatch.setattr(
+            api_index.api_data, "positions_payload",
+            lambda: {"metrics": [], "cash": [], "usdtry": None},
+        )
+        resp = client.post(
+            "/api/positions", headers=AUTH,
+            json={"symbol": "AAPL", "quantity": 10, "avg_cost": 100.0},
+        )
+        assert resp.status_code == 200
+        assert captured["saved"] == [{"symbol": "AAPL"}]
+
+    def test_returns_503_when_storage_not_configured(self, client, monkeypatch):
+        monkeypatch.setattr(api_index.storage, "can_persist", lambda: False)
+        resp = client.post("/api/positions", headers=AUTH, json={"symbol": "AAPL"})
+        assert resp.status_code == 503
+        assert resp.get_json() == {"error": "storage_not_configured"}
+
+    def test_invalid_symbol_is_400(self, client, monkeypatch):
+        monkeypatch.setattr(api_index.storage, "can_persist", lambda: True)
+        resp = client.post(
+            "/api/positions", headers=AUTH,
+            json={"symbol": "<bad>", "quantity": 1, "avg_cost": 1},
+        )
+        assert resp.status_code == 400
+
+    def test_missing_body_is_400(self, client, monkeypatch):
+        monkeypatch.setattr(api_index.storage, "can_persist", lambda: True)
+        resp = client.post("/api/positions", headers=AUTH)
+        assert resp.status_code == 400
+
+
+class TestDeletePosition:
+    def test_removes_and_returns_updated_positions(self, client, monkeypatch):
+        captured = {}
+        monkeypatch.setattr(api_index.storage, "can_persist", lambda: True)
+        monkeypatch.setattr(api_index.storage, "load_portfolio", lambda: ["x"])
+
+        def fake_remove(positions, symbol):
+            captured["removed"] = symbol
+            return []
+
+        monkeypatch.setattr(api_index.storage, "remove_position", fake_remove)
+        monkeypatch.setattr(
+            api_index.storage, "save_portfolio",
+            lambda positions: captured.setdefault("saved", positions),
+        )
+        monkeypatch.setattr(
+            api_index.api_data, "positions_payload",
+            lambda: {"metrics": [], "cash": [], "usdtry": None},
+        )
+        resp = client.delete("/api/positions/aapl", headers=AUTH)
+        assert resp.status_code == 200
+        assert captured["removed"] == "AAPL"
+        assert captured["saved"] == []
+
+    def test_returns_503_when_storage_not_configured(self, client, monkeypatch):
+        monkeypatch.setattr(api_index.storage, "can_persist", lambda: False)
+        resp = client.delete("/api/positions/AAPL", headers=AUTH)
+        assert resp.status_code == 503
+
+    def test_invalid_symbol_is_400(self, client, monkeypatch):
+        monkeypatch.setattr(api_index.storage, "can_persist", lambda: True)
+        resp = client.delete("/api/positions/%3Cbad%3E", headers=AUTH)
+        assert resp.status_code == 400
+
+
 class TestErrorShaping:
     def test_unhandled_exception_is_json_500(self, client, monkeypatch):
         def boom():

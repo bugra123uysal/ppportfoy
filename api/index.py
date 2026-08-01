@@ -1,9 +1,11 @@
-"""Vercel entrypoint: read-only JSON API over the portfolio's computed data.
+"""Vercel entrypoint: JSON API over the portfolio's computed data.
 
-GET-only by design: Vercel's filesystem is read-only at request time (only
+Mostly read-only: Vercel's filesystem is read-only at request time (only
 /tmp is writable, and it isn't persisted between invocations), so mutating
-endpoints (add/remove a position) stay a Streamlit-only feature -- see
-portfoy.storage's module docstring.
+endpoints (add/remove a position) only work when a persistent backend is
+configured (Upstash -- see portfoy.storage's module docstring and
+storage.can_persist()). They fail with a clear 503 rather than a
+generic-looking write that silently doesn't survive the next cold start.
 
 This service (see vercel.json's `services.api`) has no public rewrite of its
 own -- the "web" Next.js service reaches it only through an internal service
@@ -25,7 +27,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 from flask import Flask, Response, request  # noqa: E402
 from werkzeug.exceptions import HTTPException  # noqa: E402
 
-from portfoy import api_data, config  # noqa: E402
+from portfoy import api_data, config, storage  # noqa: E402
 from portfoy.security import ValidationError, normalize_symbol  # noqa: E402
 from portfoy.serialize import dumps  # noqa: E402
 
@@ -80,8 +82,45 @@ def _bad_request(message: str) -> HTTPException:
     return BadRequest(message)
 
 
+def _require_persistence() -> Response | None:
+    if storage.can_persist():
+        return None
+    return _json_response({"error": "storage_not_configured"}, status=503)
+
+
 @app.get("/api/positions")
 def positions() -> Response:
+    return _json_response(api_data.positions_payload())
+
+
+@app.post("/api/positions")
+def add_position() -> Response:
+    unavailable = _require_persistence()
+    if unavailable is not None:
+        return unavailable
+    body = request.get_json(silent=True) or {}
+    try:
+        new_position = storage.make_position(
+            body.get("symbol", ""),
+            body.get("quantity"),
+            body.get("avg_cost"),
+            body.get("notes", ""),
+        )
+        updated = storage.upsert_position(storage.load_portfolio(), new_position)
+    except ValidationError as exc:
+        raise _bad_request(str(exc)) from exc
+    storage.save_portfolio(updated)
+    return _json_response(api_data.positions_payload())
+
+
+@app.delete("/api/positions/<symbol>")
+def delete_position(symbol: str) -> Response:
+    unavailable = _require_persistence()
+    if unavailable is not None:
+        return unavailable
+    clean = _clean_symbol(symbol)
+    updated = storage.remove_position(storage.load_portfolio(), clean)
+    storage.save_portfolio(updated)
     return _json_response(api_data.positions_payload())
 
 

@@ -1,6 +1,8 @@
 import { getPositions } from "@/lib/api";
 import { Panel } from "@/components/panel";
 import { fmtMoney, fmtPct } from "@/lib/format";
+import { AddPositionForm } from "./add-position-form";
+import { DeletePositionButton } from "./delete-position-button";
 
 export default async function PositionsPage() {
   const { metrics, cash } = await getPositions();
@@ -10,9 +12,13 @@ export default async function PositionsPage() {
       <div>
         <h1 className="text-lg font-semibold text-text">Pozisyonlar</h1>
         <p className="mt-1 text-sm text-text-faint">
-          Salt okunur görünüm — ekleme/silme için Streamlit uygulamasını kullan.
+          Holdinglerini buradan ekleyip çıkarabilirsin.
         </p>
       </div>
+
+      <Panel title="Pozisyon Ekle">
+        <AddPositionForm />
+      </Panel>
 
       {cash.length > 0 && (
         <Panel title="Nakit">
@@ -45,7 +51,8 @@ export default async function PositionsPage() {
                   <th className="py-2 pr-4 text-right font-medium">Değer</th>
                   <th className="py-2 pr-4 text-right font-medium">K/Z</th>
                   <th className="py-2 pr-4 text-right font-medium">K/Z %</th>
-                  <th className="py-2 text-right font-medium">Ağırlık</th>
+                  <th className="py-2 pr-4 text-right font-medium">Ağırlık</th>
+                  <th className="py-2 text-right font-medium"></th>
                 </tr>
               </thead>
               <tbody>
@@ -79,8 +86,11 @@ export default async function PositionsPage() {
                     >
                       {fmtPct(m.pnl_pct)}
                     </td>
-                    <td className="tabular py-2.5 text-right text-text-dim">
+                    <td className="tabular py-2.5 pr-4 text-right text-text-dim">
                       %{(m.weight * 100).toFixed(1)}
+                    </td>
+                    <td className="py-2.5 text-right">
+                      <DeletePositionButton symbol={m.symbol} />
                     </td>
                   </tr>
                 ))}
