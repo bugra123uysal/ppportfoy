@@ -74,6 +74,18 @@ function FilterChip({ href, active, label }: { href: string; active: boolean; la
   );
 }
 
+const SENTIMENT_LABEL: Record<NewsItem["sentiment"], string> = {
+  positive: "Olumlu",
+  negative: "Olumsuz",
+  neutral: "Nötr",
+};
+
+const SENTIMENT_CLASS: Record<NewsItem["sentiment"], string> = {
+  positive: "bg-pos-soft text-pos",
+  negative: "bg-neg-soft text-neg",
+  neutral: "bg-surface-2 text-text-faint",
+};
+
 function NewsCard({ item }: { item: NewsItem }) {
   const age = timeAgo(item.published);
   return (
@@ -81,11 +93,16 @@ function NewsCard({ item }: { item: NewsItem }) {
       href={item.link}
       target="_blank"
       rel="noopener noreferrer"
-      className="flex flex-col gap-1 rounded-lg border-b border-border/60 px-2 py-3 transition-colors last:border-0 hover:bg-surface-2"
+      className="flex flex-col gap-1.5 rounded-lg border-b border-border/60 px-2 py-3 transition-colors last:border-0 hover:bg-surface-2"
     >
       <div className="flex items-center gap-2">
         <span className="rounded bg-surface-2 px-1.5 py-0.5 text-[10px] font-medium text-text-dim">
           {item.symbol}
+        </span>
+        <span
+          className={`rounded px-1.5 py-0.5 text-[10px] font-medium ${SENTIMENT_CLASS[item.sentiment]}`}
+        >
+          {SENTIMENT_LABEL[item.sentiment]}
         </span>
         <span className="text-sm text-text">{item.title}</span>
       </div>
@@ -93,6 +110,7 @@ function NewsCard({ item }: { item: NewsItem }) {
         {item.source}
         {age && ` · ${age}`}
       </p>
+      <p className="text-xs text-text-dim">{item.interpretation}</p>
     </a>
   );
 }

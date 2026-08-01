@@ -24,7 +24,7 @@ from .indicators import last_value, sma
 from .options import OptionActivity, rank_by_volume
 from .performance import SeriesResult
 from .risk import PositionMetrics
-from .rotation import build_rotation
+from .rotation import build_rotation, build_sector_leaders
 from .sentiment import SentimentScore, build_score
 
 
@@ -63,7 +63,7 @@ def portfolio_history_payload() -> list[dict]:
     return storage.load_history()
 
 
-def rotation_payload(include_mine: bool = False) -> list:
+def rotation_payload(include_mine: bool = False) -> dict:
     symbols = [config.RRG_BENCHMARK, *config.SECTOR_ETFS]
     labels = dict(config.SECTOR_ETFS)
     if include_mine:
@@ -74,10 +74,13 @@ def rotation_payload(include_mine: bool = False) -> list:
         ]
         symbols.extend(mine)
         labels.update({sym: ("Portföyüm", "My holding") for sym in mine})
-    closes = data.get_weekly_closes(tuple(symbols))
+    leader_symbols = [sym for stocks in config.SECTOR_LEADER_STOCKS.values() for sym in stocks]
+    closes = data.get_weekly_closes(tuple(dict.fromkeys([*symbols, *leader_symbols])))
     if closes.empty:
-        return []
-    return build_rotation(closes, labels, reference=list(config.SECTOR_ETFS))
+        return {"sectors": [], "leaders": {}}
+    sectors = build_rotation(closes, labels, reference=list(config.SECTOR_ETFS))
+    leaders = build_sector_leaders(closes, config.SECTOR_LEADER_STOCKS)
+    return {"sectors": sectors, "leaders": leaders}
 
 
 def option_activity_payload(symbol: str) -> OptionActivity | None:

@@ -8,6 +8,7 @@ from portfoy.rotation import (
     LEADING,
     WEAKENING,
     build_rotation,
+    build_sector_leaders,
     classify,
     cross_normalize,
     is_clockwise,
@@ -224,3 +225,55 @@ class TestBuildRotation:
         utils = next(p for p in points if p.symbol == "XLU")
         assert tech.perf_3m > 0
         assert utils.perf_3m < tech.perf_3m
+
+
+def _stock_frame() -> pd.DataFrame:
+    """A strong, a flat and a weak stock, plus an unrelated symbol not in any pool.
+
+    Deliberately noise-free (unlike _sector_frame): the ranking tests below
+    assert an exact strongest-first order, which trailing-4-week noise could
+    flip for closely-spaced trends.
+    """
+    return _closes(
+        HOT=np.linspace(100.0, 200.0, WEEKS),
+        MEH=np.linspace(100.0, 105.0, WEEKS),
+        COLD=np.linspace(100.0, 60.0, WEEKS),
+        OTHER=np.linspace(100.0, 500.0, WEEKS),
+    )
+
+
+class TestBuildSectorLeaders:
+    def test_ranks_by_1m_return_strongest_first(self):
+        pool = {"SECT": ("HOT", "MEH", "COLD")}
+        leaders = build_sector_leaders(_stock_frame(), pool, top_n=5)
+        symbols = [leader.symbol for leader in leaders["SECT"]]
+        assert symbols == ["HOT", "MEH", "COLD"]
+
+    def test_respects_top_n(self):
+        pool = {"SECT": ("HOT", "MEH", "COLD")}
+        leaders = build_sector_leaders(_stock_frame(), pool, top_n=2)
+        assert len(leaders["SECT"]) == 2
+
+    def test_symbol_missing_from_closes_is_skipped(self):
+        pool = {"SECT": ("HOT", "GHOST")}
+        leaders = build_sector_leaders(_stock_frame(), pool, top_n=5)
+        assert [leader.symbol for leader in leaders["SECT"]] == ["HOT"]
+
+    def test_symbol_outside_the_pool_is_ignored(self):
+        pool = {"SECT": ("HOT", "MEH")}
+        leaders = build_sector_leaders(_stock_frame(), pool, top_n=5)
+        assert "OTHER" not in [leader.symbol for leader in leaders["SECT"]]
+
+    def test_one_entry_per_pool_sector(self):
+        pool = {"A": ("HOT",), "B": ("COLD",)}
+        leaders = build_sector_leaders(_stock_frame(), pool)
+        assert set(leaders) == {"A", "B"}
+
+    def test_performance_fields_populated(self):
+        pool = {"SECT": ("HOT",)}
+        leader = build_sector_leaders(_stock_frame(), pool)["SECT"][0]
+        assert leader.perf_1m > 0
+        assert leader.perf_3m > 0
+
+    def test_empty_pool_yields_empty_dict(self):
+        assert build_sector_leaders(_stock_frame(), {}) == {}

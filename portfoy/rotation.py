@@ -206,6 +206,48 @@ def cross_normalize(
     return 100.0 + centred.fillna(0.0).clip(-clip, clip)
 
 
+@dataclass(frozen=True)
+class SectorLeader:
+    symbol: str
+    perf_1w: float
+    perf_1m: float
+    perf_3m: float
+
+
+def build_sector_leaders(
+    closes: pd.DataFrame,
+    sector_stocks: dict[str, tuple[str, ...]],
+    top_n: int = config.SECTOR_LEADERS_TOP_N,
+) -> dict[str, list[SectorLeader]]:
+    """Rank each sector's candidate stocks by trailing 1-month return.
+
+    Not a full-market screen -- `sector_stocks` is a curated pool of liquid,
+    well-known names per sector (see config.SECTOR_LEADER_STOCKS). This picks
+    the strongest recent performers *within that pool*, newest 1-month
+    return first, capped at `top_n` per sector.
+    """
+    result: dict[str, list[SectorLeader]] = {}
+    for sector, stocks in sector_stocks.items():
+        leaders: list[SectorLeader] = []
+        for symbol in stocks:
+            if symbol not in closes.columns:
+                continue
+            prices = closes[symbol].dropna()
+            if prices.empty:
+                continue
+            leaders.append(
+                SectorLeader(
+                    symbol=symbol,
+                    perf_1w=_pct_change(prices, 1),
+                    perf_1m=_pct_change(prices, 4),
+                    perf_3m=_pct_change(prices, 13),
+                )
+            )
+        leaders.sort(key=lambda leader: -leader.perf_1m)
+        result[sector] = leaders[:top_n]
+    return result
+
+
 def _pct_change(series: pd.Series, periods: int) -> float:
     if len(series) <= periods:
         return 0.0

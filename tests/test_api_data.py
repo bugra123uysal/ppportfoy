@@ -11,7 +11,7 @@ from datetime import date, timedelta
 import pandas as pd
 import pytest
 
-from portfoy import api_data
+from portfoy import api_data, config
 from portfoy.data import Quote
 from portfoy.options import OptionActivity
 from portfoy.storage import CashHolding, Position
@@ -92,9 +92,9 @@ class TestPortfolioHistoryPayload:
 
 
 class TestRotationPayload:
-    def test_empty_closes_returns_empty_list(self, monkeypatch):
+    def test_empty_closes_returns_empty_shape(self, monkeypatch):
         monkeypatch.setattr(api_data.data, "get_weekly_closes", lambda symbols: pd.DataFrame())
-        assert api_data.rotation_payload() == []
+        assert api_data.rotation_payload() == {"sectors": [], "leaders": {}}
 
     def test_include_mine_adds_us_holdings_only(self, monkeypatch):
         captured = {}
@@ -108,6 +108,18 @@ class TestRotationPayload:
         api_data.rotation_payload(include_mine=True)
         assert "AAPL" in captured["symbols"]
         assert "THYAO.IS" not in captured["symbols"]
+
+    def test_returns_sectors_and_leaders(self, monkeypatch):
+        idx = pd.date_range("2023-01-01", periods=160, freq="W")
+        symbols = [config.RRG_BENCHMARK, *config.SECTOR_ETFS]
+        leader_symbols = [s for stocks in config.SECTOR_LEADER_STOCKS.values() for s in stocks]
+        data_cols = {sym: pd.Series(range(160), index=idx, dtype=float) + 100.0
+                     for sym in dict.fromkeys([*symbols, *leader_symbols])}
+        closes = pd.DataFrame(data_cols)
+        monkeypatch.setattr(api_data.data, "get_weekly_closes", lambda syms: closes)
+        out = api_data.rotation_payload()
+        assert isinstance(out["sectors"], list)
+        assert set(out["leaders"]) == set(config.SECTOR_LEADER_STOCKS)
 
 
 class TestOptionsPayloads:

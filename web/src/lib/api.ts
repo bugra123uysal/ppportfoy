@@ -91,6 +91,18 @@ export interface SectorRotation {
   perf_3m: number;
 }
 
+export interface SectorLeader {
+  symbol: string;
+  perf_1w: number;
+  perf_1m: number;
+  perf_3m: number;
+}
+
+export interface RotationPayload {
+  sectors: SectorRotation[];
+  leaders: Record<string, SectorLeader[]>;
+}
+
 export interface MarketEvent {
   when: string;
   kind: "fomc" | "nfp" | "earnings";
@@ -120,6 +132,8 @@ export interface NewsItem {
   link: string;
   source: string;
   published: string;
+  sentiment: "positive" | "negative" | "neutral";
+  interpretation: string;
 }
 
 export interface SeriesResult {
@@ -139,7 +153,16 @@ class ApiError extends Error {
   }
 }
 
-async function apiGet<T>(path: string): Promise<T> {
+/**
+ * `revalidateSeconds` mirrors the *backend's own* cache TTL (see portfoy/
+ * config.py) for market-wide/reference data -- the Python API is never
+ * fresher than that anyway, so caching the same window at the Next.js fetch
+ * layer costs no real freshness but skips a round trip + function
+ * invocation on repeat navigation. Omit it (stays `no-store`) for anything
+ * showing the user's own live P&L, where an extra caching layer on top of
+ * the backend's own TTL would compound staleness.
+ */
+async function apiGet<T>(path: string, revalidateSeconds?: number): Promise<T> {
   const base = process.env.PORTFOY_API_URL;
   const key = process.env.PORTFOY_API_KEY;
   if (!base || !key) {
@@ -147,7 +170,9 @@ async function apiGet<T>(path: string): Promise<T> {
   }
   const res = await fetch(new URL(path, base), {
     headers: { "X-API-Key": key },
-    cache: "no-store",
+    ...(revalidateSeconds
+      ? { next: { revalidate: revalidateSeconds } }
+      : { cache: "no-store" as const }),
   });
   if (!res.ok) {
     throw new ApiError(path, res.status);
@@ -164,33 +189,33 @@ export function getPortfolioSummary(): Promise<PortfolioSummary> {
 }
 
 export function getMacro(): Promise<MacroRow[]> {
-  return apiGet<MacroRow[]>("/api/market/macro");
+  return apiGet<MacroRow[]>("/api/market/macro", 300);
 }
 
 export function getBreadth(): Promise<BreadthSnapshot | null> {
-  return apiGet<BreadthSnapshot | null>("/api/market/breadth");
+  return apiGet<BreadthSnapshot | null>("/api/market/breadth", 1800);
 }
 
 export function getSentiment(): Promise<SentimentScore | null> {
-  return apiGet<SentimentScore | null>("/api/market/sentiment");
+  return apiGet<SentimentScore | null>("/api/market/sentiment", 300);
 }
 
-export function getRotation(includeMine = false): Promise<SectorRotation[]> {
-  return apiGet<SectorRotation[]>(`/api/rotation?include_mine=${includeMine}`);
+export function getRotation(includeMine = false): Promise<RotationPayload> {
+  return apiGet<RotationPayload>(`/api/rotation?include_mine=${includeMine}`, 3600);
 }
 
 export function getCalendar(days = 45): Promise<MarketEvent[]> {
-  return apiGet<MarketEvent[]>(`/api/calendar?days=${days}`);
+  return apiGet<MarketEvent[]>(`/api/calendar?days=${days}`, 3600);
 }
 
 export function getOptionsScan(): Promise<OptionActivity[]> {
-  return apiGet<OptionActivity[]>("/api/options");
+  return apiGet<OptionActivity[]>("/api/options", 900);
 }
 
 export function getNews(symbol: string, lang = "tr"): Promise<NewsItem[]> {
-  return apiGet<NewsItem[]>(`/api/news/${encodeURIComponent(symbol)}?lang=${lang}`);
+  return apiGet<NewsItem[]>(`/api/news/${encodeURIComponent(symbol)}?lang=${lang}`, 900);
 }
 
 export function getCompare(period: string, base: "TRY" | "USD"): Promise<SeriesResult[]> {
-  return apiGet<SeriesResult[]>(`/api/compare?period=${period}&base=${base}`);
+  return apiGet<SeriesResult[]>(`/api/compare?period=${period}&base=${base}`, 900);
 }

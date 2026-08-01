@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { getRotation } from "@/lib/api";
+import type { SectorLeader, SectorRotation } from "@/lib/api";
 import { Panel } from "@/components/panel";
 import { RrgChart } from "@/components/rrg-chart";
 import { fmtPct } from "@/lib/format";
@@ -11,6 +12,15 @@ const QUADRANT_TR: Record<string, string> = {
   improving: "İyileşen",
 };
 
+// RRG heuristic: improving/leading sectors are still gaining relative
+// strength, so they're the rotation candidates worth a look; weakening/
+// lagging sectors are the ones to be rotating out of.
+const ROTATE_IN_QUADRANTS = new Set(["leading", "improving"]);
+
+function currentY(p: SectorRotation): number {
+  return p.tail_y[p.tail_y.length - 1];
+}
+
 export default async function RotationPage({
   searchParams,
 }: {
@@ -18,8 +28,13 @@ export default async function RotationPage({
 }) {
   const { mine } = await searchParams;
   const includeMine = mine === "1";
-  const points = await getRotation(includeMine);
+  const { sectors: points, leaders } = await getRotation(includeMine);
   const movers = points.filter((p) => p.quadrant !== p.prev_quadrant);
+  const candidates = points
+    .filter((p) => ROTATE_IN_QUADRANTS.has(p.quadrant))
+    .sort((a, b) => currentY(b) - currentY(a));
+  const topPick = candidates[0];
+  const runnerUps = candidates.slice(1, 3);
 
   return (
     <>
@@ -45,6 +60,41 @@ export default async function RotationPage({
         <p className="text-sm text-text-faint">Veri alınamadı.</p>
       ) : (
         <>
+          <Panel title="Rotasyon Önerisi">
+            {topPick ? (
+              <div className="flex flex-col gap-2">
+                <p className="text-sm text-text">
+                  Şu an en güçlü konumda: {" "}
+                  <span className="font-medium text-text">
+                    {topPick.symbol} · {topPick.label_tr}
+                  </span>{" "}
+                  <span className="text-text-dim">({QUADRANT_TR[topPick.quadrant]} kadran)</span>{" "}
+                  — son 1 ayda{" "}
+                  <span className={topPick.perf_1m >= 0 ? "text-pos" : "text-neg"}>
+                    {fmtPct(topPick.perf_1m, 1)}
+                  </span>
+                  .
+                </p>
+                {runnerUps.length > 0 && (
+                  <p className="text-xs text-text-faint">
+                    Diğer güçlü adaylar:{" "}
+                    {runnerUps
+                      .map((p) => `${p.symbol} (${QUADRANT_TR[p.quadrant]})`)
+                      .join(", ")}
+                  </p>
+                )}
+                <p className="text-[11px] text-text-faint">
+                  Lider/iyileşen kadrandaki, momentumu en güçlü sektör baz alınarak
+                  hesaplanmıştır. Yatırım tavsiyesi değildir.
+                </p>
+              </div>
+            ) : (
+              <p className="text-sm text-text-faint">
+                Şu anda öne çıkan bir rotasyon adayı yok — tüm sektörler zayıflıyor ya da geride.
+              </p>
+            )}
+          </Panel>
+
           <Panel title="RRG Haritası">
             <RrgChart points={points} />
           </Panel>
@@ -61,6 +111,10 @@ export default async function RotationPage({
               </ul>
             </Panel>
           )}
+
+          <Panel title="Sektör Başına En İyi 5 Hisse" subtitle="Son 1 ay getirisine göre sıralı">
+            <SectorLeaders sectors={points} leaders={leaders} />
+          </Panel>
 
           <Panel title="Performans Sıralaması">
             <div className="overflow-x-auto">
@@ -95,6 +149,43 @@ export default async function RotationPage({
         </>
       )}
     </>
+  );
+}
+
+function SectorLeaders({
+  sectors,
+  leaders,
+}: {
+  sectors: SectorRotation[];
+  leaders: Record<string, SectorLeader[]>;
+}) {
+  const withLeaders = sectors.filter((s) => (leaders[s.symbol] ?? []).length > 0);
+  if (withLeaders.length === 0) {
+    return <p className="text-sm text-text-faint">Veri yok.</p>;
+  }
+  return (
+    <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
+      {withLeaders.map((sector) => (
+        <div key={sector.symbol} className="rounded-lg border border-border p-3">
+          <p className="mb-2 text-xs font-medium text-text-dim">
+            {sector.symbol} · {sector.label_tr}
+          </p>
+          <ul className="flex flex-col gap-1">
+            {leaders[sector.symbol].map((leader, i) => (
+              <li key={leader.symbol} className="flex items-center justify-between text-sm">
+                <span className="text-text">
+                  <span className="mr-1.5 text-text-faint">{i + 1}.</span>
+                  {leader.symbol}
+                </span>
+                <span className={`tabular ${leader.perf_1m >= 0 ? "text-pos" : "text-neg"}`}>
+                  {fmtPct(leader.perf_1m, 1)}
+                </span>
+              </li>
+            ))}
+          </ul>
+        </div>
+      ))}
+    </div>
   );
 }
 

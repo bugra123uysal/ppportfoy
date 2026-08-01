@@ -15,7 +15,7 @@ import requests
 import yfinance as yf
 from defusedxml import ElementTree as SafeET
 
-from . import config
+from . import config, news_sentiment
 from .cache import cached
 from .security import is_safe_url
 
@@ -43,7 +43,10 @@ def get_news_for(symbol: str, lang: str = "tr") -> list[dict]:
             seen.add(key)
             unique.append(item)
     unique.sort(key=lambda x: x["published"], reverse=True)
-    return unique[: config.NEWS_PER_SYMBOL]
+    top = unique[: config.NEWS_PER_SYMBOL]
+    for item in top:
+        item["sentiment"], item["interpretation"] = news_sentiment.interpret(item["title"], lang)
+    return top
 
 
 def _yahoo_news(symbol: str) -> list[dict]:

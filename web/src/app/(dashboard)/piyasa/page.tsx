@@ -19,13 +19,14 @@ function breadthHealth(pctAbove200: number): { emoji: string; text: string } {
 }
 
 export default async function MarketCompassPage() {
-  const [breadth, sentiment, rotation, calendar] = await Promise.all([
+  const [breadth, sentiment, rotationPayload, calendar] = await Promise.all([
     getBreadth(),
     getSentiment(),
     getRotation(false),
     getCalendar(45),
   ]);
 
+  const rotation = rotationPayload.sectors;
   const leading = rotation.filter((r) => r.quadrant === "leading");
   const lagging = rotation.filter((r) => r.quadrant === "lagging");
   const today = new Date();

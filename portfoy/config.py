@@ -123,6 +123,24 @@ RRG_MOMENTUM_WINDOW = 10     # weeks, SMA used to detect acceleration
 RRG_TAIL_WEEKS = 8           # how many weeks of trail to draw behind the arrow
 RRG_CLIP = 3.0               # cap scores at ±3σ so one wild symbol can't squash the map
 
+# Curated pool of liquid, well-known large caps per sector -- NOT an
+# exhaustive constituent list. "Top 5" leaders are picked from within this
+# pool by trailing 1-month return, so results are only as good as this pool.
+SECTOR_LEADER_STOCKS: dict[str, tuple[str, ...]] = {
+    "XLK": ("AAPL", "MSFT", "NVDA", "AVGO", "ORCL", "CRM", "AMD", "ADBE"),
+    "XLF": ("JPM", "V", "MA", "GS", "MS", "BAC", "WFC", "BLK"),
+    "XLE": ("XOM", "CVX", "COP", "SLB", "EOG", "WMB"),
+    "XLV": ("UNH", "LLY", "JNJ", "MRK", "ABBV", "TMO", "ABT", "PFE"),
+    "XLY": ("AMZN", "TSLA", "HD", "MCD", "NKE", "LOW", "SBUX", "BKNG"),
+    "XLP": ("PG", "KO", "PEP", "COST", "WMT", "PM"),
+    "XLI": ("GE", "CAT", "RTX", "HON", "UNP", "BA", "UPS", "DE"),
+    "XLB": ("LIN", "SHW", "APD", "ECL", "FCX", "NEM"),
+    "XLU": ("NEE", "SO", "DUK", "AEP", "SRE", "D"),
+    "XLRE": ("PLD", "AMT", "EQIX", "SPG", "PSA", "O"),
+    "XLC": ("GOOGL", "META", "NFLX", "DIS", "CMCSA", "T", "VZ"),
+}
+SECTOR_LEADERS_TOP_N = 5
+
 # --- Cash ------------------------------------------------------------------
 CASH_CURRENCIES = ("TRY", "USD")
 MAX_CASH = 1e12
