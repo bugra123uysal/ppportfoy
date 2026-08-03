@@ -122,6 +122,42 @@ class TestRotationPayload:
         assert set(out["leaders"]) == set(config.SECTOR_LEADER_STOCKS)
 
 
+class TestTradeScanPayload:
+    def test_empty_history_yields_no_signals(self, monkeypatch):
+        monkeypatch.setattr(api_data.data, "get_history", lambda sym, period=None: pd.DataFrame())
+        assert api_data.trade_scan_payload() == {"signals": []}
+
+    def test_universe_covers_every_sector_leader_stock(self, monkeypatch):
+        captured = {}
+
+        def fake_history(sym, period=None):
+            captured[sym] = True
+            return pd.DataFrame()
+
+        monkeypatch.setattr(api_data.data, "get_history", fake_history)
+        api_data.trade_scan_payload()
+        all_stocks = {s for stocks in config.SECTOR_LEADER_STOCKS.values() for s in stocks}
+        assert set(captured) == all_stocks
+
+
+class TestMoneyFlowPayload:
+    def test_empty_history_yields_no_signals(self, monkeypatch):
+        monkeypatch.setattr(api_data.data, "get_history", lambda sym, period=None: pd.DataFrame())
+        assert api_data.money_flow_payload() == {"signals": []}
+
+    def test_universe_covers_every_sector_leader_stock(self, monkeypatch):
+        captured = {}
+
+        def fake_history(sym, period=None):
+            captured[sym] = True
+            return pd.DataFrame()
+
+        monkeypatch.setattr(api_data.data, "get_history", fake_history)
+        api_data.money_flow_payload()
+        all_stocks = {s for stocks in config.SECTOR_LEADER_STOCKS.values() for s in stocks}
+        assert set(captured) == all_stocks
+
+
 class TestOptionsPayloads:
     def test_option_activity_payload_delegates(self, monkeypatch):
         activity = OptionActivity(symbol="SPY", expiry="2026-08-15", call_volume=1,

@@ -4,6 +4,7 @@ import type { SectorLeader, SectorRotation } from "@/lib/api";
 import { Panel } from "@/components/panel";
 import { RrgChart } from "@/components/rrg-chart";
 import { fmtPct } from "@/lib/format";
+import { PerformanceTable } from "./performance-table";
 
 const QUADRANT_TR: Record<string, string> = {
   leading: "Lider",
@@ -29,11 +30,14 @@ export default async function RotationPage({
   const { mine } = await searchParams;
   const includeMine = mine === "1";
   const { sectors: points, leaders } = await getRotation(includeMine);
-  const movers = points.filter((p) => p.quadrant !== p.prev_quadrant);
   // Rotation candidates are always sectors, never the user's own holdings --
   // "rotate into" only makes sense between sectors, even when "Holdinglerimi
   // de göster" overlays individual stocks on the map.
   const sectorSymbols = new Set(Object.keys(leaders));
+  const sectorPoints = points.filter((p) => sectorSymbols.has(p.symbol));
+  // Kadran değişimleri de sadece sektör/ETF bazında gösterilir -- bireysel
+  // hisselerin kadran geçişleri listeyi anlamsız derecede kalabalıklaştırır.
+  const movers = sectorPoints.filter((p) => p.quadrant !== p.prev_quadrant);
   const candidates = points
     .filter((p) => sectorSymbols.has(p.symbol) && ROTATE_IN_QUADRANTS.has(p.quadrant))
     .sort((a, b) => currentY(b) - currentY(a));
@@ -121,34 +125,7 @@ export default async function RotationPage({
           </Panel>
 
           <Panel title="Performans Sıralaması">
-            <div className="overflow-x-auto">
-              <table className="w-full min-w-[560px] border-collapse text-sm">
-                <thead>
-                  <tr className="border-b border-border text-left text-xs text-text-faint">
-                    <th className="py-2 pr-4 font-medium">Sektör</th>
-                    <th className="py-2 pr-4 font-medium">Bölge</th>
-                    <th className="py-2 pr-4 text-right font-medium">1H</th>
-                    <th className="py-2 pr-4 text-right font-medium">1A</th>
-                    <th className="py-2 text-right font-medium">3A</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {[...points]
-                    .sort((a, b) => b.perf_1m - a.perf_1m)
-                    .map((p) => (
-                      <tr key={p.symbol} className="border-b border-border/60 last:border-0">
-                        <td className="py-2.5 pr-4 font-medium text-text">
-                          {p.symbol} <span className="text-text-faint">· {p.label_tr}</span>
-                        </td>
-                        <td className="py-2.5 pr-4 text-text-dim">{QUADRANT_TR[p.quadrant]}</td>
-                        <PerfCell value={p.perf_1w} />
-                        <PerfCell value={p.perf_1m} />
-                        <PerfCell value={p.perf_3m} last />
-                      </tr>
-                    ))}
-                </tbody>
-              </table>
-            </div>
+            <PerformanceTable points={points} />
           </Panel>
         </>
       )}
@@ -196,12 +173,3 @@ function SectorLeaders({
   );
 }
 
-function PerfCell({ value, last }: { value: number; last?: boolean }) {
-  return (
-    <td
-      className={`tabular py-2.5 text-right ${last ? "" : "pr-4"} ${value >= 0 ? "text-pos" : "text-neg"}`}
-    >
-      {fmtPct(value, 1)}
-    </td>
-  );
-}

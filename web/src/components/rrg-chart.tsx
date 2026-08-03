@@ -4,7 +4,7 @@ const WIDTH = 700;
 const HEIGHT = 560;
 const PAD = 40;
 
-const QUADRANT_COLOR: Record<SectorRotation["quadrant"], string> = {
+export const QUADRANT_COLOR: Record<SectorRotation["quadrant"], string> = {
   leading: "var(--pos)",
   weakening: "var(--accent)",
   improving: "#3987e5",

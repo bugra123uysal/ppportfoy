@@ -1,6 +1,6 @@
 """Market data access via yfinance (free, no API key).
 
-Everything is cached (see portfoy.cache -- in-process for Streamlit/tests,
+Everything is cached (see portfoy.cache -- in-process for local dev/tests,
 Upstash Redis for the Vercel API) and wrapped defensively: Yahoo endpoints
 fail or change shape regularly, so every function degrades to None / empty
 instead of raising into the caller.
@@ -223,6 +223,51 @@ def get_option_activity(symbol: str):
     except (AttributeError, KeyError, TypeError):
         return None
     return build_activity(symbol, str(expiry), summary)
+
+
+class OwnershipFlow(NamedTuple):
+    institutional_pct: float | None    # % of shares held by institutions
+    insider_net_pct_6m: float | None   # net insider buying (+) / selling (-) as % of shares held
+
+
+def _encode_ownership(flow: OwnershipFlow | None) -> str:
+    return "" if flow is None else json.dumps(list(flow))
+
+
+def _decode_ownership(raw: str) -> OwnershipFlow | None:
+    return None if not raw else OwnershipFlow(*json.loads(raw))
+
+
+@cached(ttl=config.OWNERSHIP_CACHE_TTL, encode=_encode_ownership, decode=_decode_ownership)
+def get_ownership_flow(symbol: str) -> OwnershipFlow | None:
+    """Institutional ownership % and 6-month net insider buying (Yahoo Holders tab)."""
+    try:
+        ticker = yf.Ticker(symbol)
+        major = ticker.major_holders
+        purchases = ticker.insider_purchases
+    except Exception:
+        return None
+
+    institutional_pct = None
+    if major is not None and not major.empty and "institutionsPercentHeld" in major.index:
+        try:
+            institutional_pct = float(major.loc["institutionsPercentHeld", "Value"]) * 100.0
+        except (KeyError, TypeError, ValueError):
+            institutional_pct = None
+
+    insider_net_pct_6m = None
+    if purchases is not None and not purchases.empty:
+        label_col = "Insider Purchases Last 6m"
+        row = purchases[purchases[label_col] == "% Net Shares Purchased (Sold)"]
+        if not row.empty:
+            try:
+                insider_net_pct_6m = float(row["Shares"].iloc[0]) * 100.0
+            except (TypeError, ValueError):
+                insider_net_pct_6m = None
+
+    if institutional_pct is None and insider_net_pct_6m is None:
+        return None
+    return OwnershipFlow(institutional_pct, insider_net_pct_6m)
 
 
 def symbol_exists(symbol: str) -> bool:

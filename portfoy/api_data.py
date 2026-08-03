@@ -1,14 +1,12 @@
-"""Aggregation functions for the read-only JSON API (see api/index.py).
+"""Query functions backing the JSON API's read endpoints (see api/index.py).
 
-Each function replicates a data-loading chain that already exists in
-app.build_context or one of the views/ pages, but returns plain dataclasses/
-dicts instead of rendering Streamlit UI. Kept here (not in api/) so it stays
-unit-testable with plain pytest -- no Flask, no HTTP, no Vercel involved.
+Each function returns plain dataclasses/dicts rather than anything
+framework-specific, and is kept here (not in api/) so it stays unit-testable
+with plain pytest -- no Flask, no HTTP, no Vercel involved.
 
-The API is read-only by design: Vercel's filesystem is writable only under
-/tmp and that write is not persisted between invocations, so
-storage.save_portfolio() has nowhere durable to write. Adding/removing
-positions stays a Streamlit-only feature (see portfoy.storage's docstring).
+Mutations (add/remove position) go through storage.py directly from
+api/index.py instead of living here -- see that module's docstring for how
+writes survive Vercel's read-only filesystem (Upstash, when configured).
 """
 
 from __future__ import annotations
@@ -21,11 +19,13 @@ from . import config, data, performance, risk, storage
 from .breadth import BreadthSnapshot, build_snapshot
 from .calendar_events import MarketEvent, upcoming_events
 from .indicators import last_value, sma
+from .money_flow import build_money_flow_scan
 from .options import OptionActivity, rank_by_volume
 from .performance import SeriesResult
 from .risk import PositionMetrics
 from .rotation import build_rotation, build_sector_leaders
 from .sentiment import SentimentScore, build_score
+from .trade_scan import build_trade_scan
 
 
 def _load_metrics() -> tuple[list[PositionMetrics], list[storage.CashHolding], float | None]:
@@ -81,6 +81,23 @@ def rotation_payload(include_mine: bool = False) -> dict:
     sectors = build_rotation(closes, labels, reference=list(config.SECTOR_ETFS))
     leaders = build_sector_leaders(closes, config.SECTOR_LEADER_STOCKS)
     return {"sectors": sectors, "leaders": leaders}
+
+
+def _sector_leader_universe() -> dict[str, str]:
+    """SECTOR_LEADER_STOCKS flattened to ticker -> Turkish sector label."""
+    return {
+        stock: config.SECTOR_ETFS[sector_etf][0]
+        for sector_etf, stocks in config.SECTOR_LEADER_STOCKS.items()
+        for stock in stocks
+    }
+
+
+def trade_scan_payload() -> dict:
+    return {"signals": build_trade_scan(_sector_leader_universe())}
+
+
+def money_flow_payload() -> dict:
+    return {"signals": build_money_flow_scan(_sector_leader_universe())}
 
 
 def option_activity_payload(symbol: str) -> OptionActivity | None:

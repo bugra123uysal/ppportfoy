@@ -8,11 +8,6 @@ modifying their inputs.
 The file holds ``{"positions": [...], "cash": [...]}``. A bare list — the
 format used before cash existed — is still read as a positions-only file.
 
-Demo mode (``PORTFOY_DEMO=1``): for public deployments nothing touches the
-disk. Each visitor gets an isolated, session-only copy seeded with an example
-portfolio, so a shared instance never exposes or mixes anyone's data and
-ephemeral cloud filesystems stop mattering.
-
 Serverless fallback (``PORTFOY_PORTFOLIO_JSON`` / ``PORTFOY_HISTORY_JSON``):
 ``data/`` is gitignored, so a platform that deploys from git (Vercel) never
 has the on-disk file to read. When the file is missing, these env vars --
@@ -25,14 +20,13 @@ itself isn't kept between invocations, so writes (adding/removing a
 position from the web app) cannot go to a local file there. When Upstash is
 configured, reads and writes both go through it instead of the local file --
 Upstash always wins over the env-var seed once something has actually been
-written, since it reflects the current mutable state. Local/Streamlit use is
+written, since it reflects the current mutable state. Local use is
 unaffected: Upstash env vars are never set in that environment, so this
 module falls straight back to plain file I/O, unchanged.
 """
 
 from __future__ import annotations
 
-import copy
 import json
 import os
 import tempfile
@@ -234,55 +228,6 @@ def append_snapshot(
     return history
 
 
-# --- demo mode (public deployments) ----------------------------------------
-
-DEMO_SEED: dict = {
-    "positions": [
-        {"symbol": "NVDA", "quantity": 12.0, "avg_cost": 168.0,
-         "currency": "USD", "added": "2026-05-04", "notes": ""},
-        {"symbol": "AAPL", "quantity": 10.0, "avg_cost": 310.0,
-         "currency": "USD", "added": "2026-04-13", "notes": ""},
-        {"symbol": "MSFT", "quantity": 6.0, "avg_cost": 405.0,
-         "currency": "USD", "added": "2026-06-01", "notes": ""},
-        {"symbol": "THYAO.IS", "quantity": 150.0, "avg_cost": 285.0,
-         "currency": "TRY", "added": "2026-03-20", "notes": ""},
-        {"symbol": "ASELS.IS", "quantity": 80.0, "avg_cost": 372.0,
-         "currency": "TRY", "added": "2026-06-15", "notes": ""},
-    ],
-    "cash": [
-        {"currency": "USD", "amount": 1500.0},
-        {"currency": "TRY", "amount": 25000.0},
-    ],
-}
-
-
-def is_demo() -> bool:
-    """True when the app runs as a public demo (set PORTFOY_DEMO=1)."""
-    return os.environ.get("PORTFOY_DEMO", "").strip().lower() in {"1", "true", "yes"}
-
-
-def _session_store() -> dict | None:
-    """Per-visitor in-memory file store, or None when disk storage applies.
-
-    Only active in demo mode inside a running Streamlit server; tests and
-    bare scripts fall through to the regular disk path.
-    """
-    if not is_demo():
-        return None
-    try:
-        import streamlit as st
-        from streamlit import runtime
-    except ImportError:
-        return None
-    if not runtime.exists():
-        return None
-    if "_demo_files" not in st.session_state:
-        st.session_state["_demo_files"] = {
-            str(config.PORTFOLIO_FILE): copy.deepcopy(DEMO_SEED),
-        }
-    return st.session_state["_demo_files"]
-
-
 # --- low-level JSON helpers ------------------------------------------------
 
 def _positions_payload(raw: object) -> list:
@@ -309,25 +254,20 @@ _PERSISTENT_KEYS = {
 def can_persist() -> bool:
     """True when a write made right now will actually survive.
 
-    Local/Streamlit use always has a writable working directory, so this is
-    only False in the one case that matters: running on Vercel (a read-only
-    filesystem outside /tmp, which itself isn't kept between invocations)
-    without Upstash configured to take writes instead. Callers that mutate
-    storage (e.g. the API's add/remove-position routes) should check this
-    first and fail with a clear error rather than let an unwritable-
-    filesystem OSError surface as a generic 500.
+    Local use always has a writable working directory, so this is only False
+    in the one case that matters: running on Vercel (a read-only filesystem
+    outside /tmp, which itself isn't kept between invocations) without
+    Upstash configured to take writes instead. Callers that mutate storage
+    (e.g. the API's add/remove-position routes) should check this first and
+    fail with a clear error rather than let an unwritable-filesystem OSError
+    surface as a generic 500.
     """
-    if is_demo():
-        return True
     if cache.get_persistent_backend() is not None:
         return True
     return os.environ.get("VERCEL", "").strip() != "1"
 
 
 def _read_json(path: Path) -> object:
-    store = _session_store()
-    if store is not None:
-        return store.get(str(path))
     persistent = _persistent_value(path)
     if persistent is not None:
         return persistent
@@ -373,10 +313,6 @@ def _env_fallback(path: Path) -> object:
 
 
 def _write_json_atomic(path: Path, payload: object) -> None:
-    store = _session_store()
-    if store is not None:
-        store[str(path)] = payload
-        return
     key = _PERSISTENT_KEYS.get(path)
     if key is not None:
         backend = cache.get_persistent_backend()

@@ -12,5 +12,6 @@ export const NAV_ITEMS: NavItem[] = [
   { href: "/karsilastirma", label: "Getiri Karşılaştırma", glyph: "∿" },
   { href: "/rotasyon", label: "Sektör Rotasyonu", glyph: "◎" },
   { href: "/opsiyon", label: "Opsiyon Radarı", glyph: "◐" },
+  { href: "/my-trade", label: "My Trade", glyph: "⚡" },
   { href: "/haberler", label: "Haberler", glyph: "▦" },
 ];

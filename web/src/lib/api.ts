@@ -103,6 +103,37 @@ export interface RotationPayload {
   leaders: Record<string, SectorLeader[]>;
 }
 
+export interface TradeSignal {
+  symbol: string;
+  sector: string;
+  price: number;
+  change_1d: number;
+  groups: number[];
+  atr_14: number | null;
+  suggested_stop: number | null;
+}
+
+export interface TradeScanPayload {
+  signals: TradeSignal[];
+}
+
+export interface MoneyFlowSignal {
+  symbol: string;
+  sector: string;
+  price: number;
+  change_1d: number;
+  cmf: number | null;
+  cmf_signal: "accumulation" | "distribution" | "notr";
+  mfi: number | null;
+  obv_trend: "yukselis" | "dusus" | "yatay";
+  institutional_pct: number | null;
+  insider_net_pct_6m: number | null;
+}
+
+export interface MoneyFlowPayload {
+  signals: MoneyFlowSignal[];
+}
+
 export interface MarketEvent {
   when: string;
   kind: "fomc" | "nfp" | "earnings";
@@ -219,6 +250,16 @@ export function getSentiment(): Promise<SentimentScore | null> {
 
 export function getRotation(includeMine = false): Promise<RotationPayload> {
   return apiGet<RotationPayload>(`/api/rotation?include_mine=${includeMine}`, 3600);
+}
+
+// No revalidateSeconds: this is triggered on demand by a button, not
+// rendered at page-load, so every click should get a fresh scan.
+export function getTradeScan(): Promise<TradeScanPayload> {
+  return apiGet<TradeScanPayload>("/api/trade-scan");
+}
+
+export function getMoneyFlow(): Promise<MoneyFlowPayload> {
+  return apiGet<MoneyFlowPayload>("/api/money-flow");
 }
 
 export function getCalendar(days = 45): Promise<MarketEvent[]> {

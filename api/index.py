@@ -140,6 +140,16 @@ def rotation() -> Response:
     return _json_response(api_data.rotation_payload(include_mine))
 
 
+@app.get("/api/trade-scan")
+def trade_scan() -> Response:
+    return _json_response(api_data.trade_scan_payload())
+
+
+@app.get("/api/money-flow")
+def money_flow() -> Response:
+    return _json_response(api_data.money_flow_payload())
+
+
 @app.get("/api/options")
 def options_scan() -> Response:
     return _json_response(api_data.options_scan_payload())

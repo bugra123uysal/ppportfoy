@@ -141,6 +141,33 @@ SECTOR_LEADER_STOCKS: dict[str, tuple[str, ...]] = {
 }
 SECTOR_LEADERS_TOP_N = 5
 
+# --- My Trade: indicator screener -------------------------------------
+# Reuses SECTOR_LEADER_STOCKS (flattened, ticker -> sector) as the scan
+# universe, so results carry a sector label for free. Thresholds below are
+# standard TA convention, not backtested -- see portfoy/trade_scan.py.
+TRADE_SCAN_HISTORY_PERIOD = "6mo"
+TRADE_SCAN_CACHE_TTL = 3600
+SMI_PERIOD, SMI_SIGNAL = 10, 3
+BB_PERIOD, BB_STD = 20, 2.0
+MAD_OVERSOLD_PCT = -5.0        # close this far below its own 21d EMA = "aşırı ucuz" dip
+STOCH_RSI_PERIOD = 14
+UT_BOT_ATR_PERIOD, UT_BOT_KEY_VALUE = 10, 2.0   # QuantNomad's public defaults
+TREND_MAGIC_CCI_PERIOD = 20
+STOP_ATR_MULT = 1.5           # suggested stop = last close - ATR14 * this
+
+# --- My Trade: sermaye akışı (money flow) ----------------------------------
+# Same scan universe as the indicator screener above. Combines a daily
+# price/volume-derived signal (CMF/MFI/OBV, free from OHLCV) with a periodic
+# filing-derived one (institutional %/insider net buying, free from Yahoo's
+# Holders tab) -- see portfoy/money_flow.py.
+MONEY_FLOW_HISTORY_PERIOD = "6mo"
+MONEY_FLOW_CACHE_TTL = 3600
+OWNERSHIP_CACHE_TTL = 21600     # holders/insider filings update slowly; 6h is plenty fresh
+CMF_PERIOD = 20
+CMF_THRESHOLD = 0.05            # |CMF| below this counts as "nötr", not accumulation/distribution
+MFI_PERIOD = 14
+OBV_TREND_LOOKBACK = 10         # bars compared to call OBV "yükseliş"/"düşüş"/"yatay"
+
 # --- Cash ------------------------------------------------------------------
 CASH_CURRENCIES = ("TRY", "USD")
 MAX_CASH = 1e12

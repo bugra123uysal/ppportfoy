@@ -215,9 +215,3 @@ class TestCanPersist:
         monkeypatch.setattr(storage.cache, "get_persistent_backend", lambda: None)
         monkeypatch.setenv("VERCEL", "1")
         assert storage.can_persist() is False
-
-    def test_true_in_demo_mode_even_on_vercel_without_upstash(self, monkeypatch):
-        monkeypatch.setattr(storage.cache, "get_persistent_backend", lambda: None)
-        monkeypatch.setenv("VERCEL", "1")
-        monkeypatch.setenv("PORTFOY_DEMO", "1")
-        assert storage.can_persist() is True

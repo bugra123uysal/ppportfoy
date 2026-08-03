@@ -3,6 +3,7 @@ import { getCompare } from "@/lib/api";
 import { Panel } from "@/components/panel";
 import { LineChart } from "@/components/line-chart";
 import { fmtPct } from "@/lib/format";
+import { CompareTable } from "./compare-table";
 
 const PERIODS: Record<string, string> = {
   per_1m: "1 Ay",
@@ -89,39 +90,7 @@ export default async function ComparePage({
           </Panel>
 
           <Panel title="Sıralama">
-            <div className="overflow-x-auto">
-              <table className="w-full min-w-[420px] border-collapse text-sm">
-                <thead>
-                  <tr className="border-b border-border text-left text-xs text-text-faint">
-                    <th className="py-2 pr-4 font-medium">Sıra</th>
-                    <th className="py-2 pr-4 font-medium">Varlık</th>
-                    <th className="py-2 pr-4 text-right font-medium">Getiri</th>
-                    <th className="py-2 text-right font-medium">Portföye Fark</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {results.map((r, i) => {
-                    const vs = mine ? r.return_pct - mine.return_pct : 0;
-                    return (
-                      <tr key={r.key} className="border-b border-border/60 last:border-0">
-                        <td className="py-2.5 pr-4 text-text-faint">{i + 1}</td>
-                        <td className="py-2.5 pr-4 font-medium text-text">
-                          {r.key === "portfolio" ? "Portföyüm" : r.label_tr}
-                        </td>
-                        <td
-                          className={`tabular py-2.5 pr-4 text-right ${r.return_pct >= 0 ? "text-pos" : "text-neg"}`}
-                        >
-                          {fmtPct(r.return_pct, 2)}
-                        </td>
-                        <td className={`tabular py-2.5 text-right ${vs >= 0 ? "text-pos" : "text-neg"}`}>
-                          {fmtPct(vs, 2)}
-                        </td>
-                      </tr>
-                    );
-                  })}
-                </tbody>
-              </table>
-            </div>
+            <CompareTable results={results} minePct={mine ? mine.return_pct : 0} />
           </Panel>
         </>
       )}

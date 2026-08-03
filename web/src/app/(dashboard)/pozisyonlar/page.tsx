@@ -1,8 +1,8 @@
 import { getPositions } from "@/lib/api";
 import { Panel } from "@/components/panel";
-import { fmtMoney, fmtPct } from "@/lib/format";
+import { fmtMoney } from "@/lib/format";
 import { AddPositionForm } from "./add-position-form";
-import { DeletePositionButton } from "./delete-position-button";
+import { PositionsTable } from "./positions-table";
 
 export default async function PositionsPage() {
   const { metrics, cash } = await getPositions();
@@ -39,64 +39,7 @@ export default async function PositionsPage() {
         {metrics.length === 0 ? (
           <p className="text-sm text-text-faint">Pozisyon yok.</p>
         ) : (
-          <div className="overflow-x-auto">
-            <table className="w-full min-w-[720px] border-collapse text-sm">
-              <thead>
-                <tr className="border-b border-border text-left text-xs text-text-faint">
-                  <th className="py-2 pr-4 font-medium">Sembol</th>
-                  <th className="py-2 pr-4 text-right font-medium">Adet</th>
-                  <th className="py-2 pr-4 text-right font-medium">Ort. Maliyet</th>
-                  <th className="py-2 pr-4 text-right font-medium">Fiyat</th>
-                  <th className="py-2 pr-4 text-right font-medium">Günlük %</th>
-                  <th className="py-2 pr-4 text-right font-medium">Değer</th>
-                  <th className="py-2 pr-4 text-right font-medium">K/Z</th>
-                  <th className="py-2 pr-4 text-right font-medium">K/Z %</th>
-                  <th className="py-2 pr-4 text-right font-medium">Ağırlık</th>
-                  <th className="py-2 text-right font-medium"></th>
-                </tr>
-              </thead>
-              <tbody>
-                {metrics.map((m) => (
-                  <tr key={m.symbol} className="border-b border-border/60 last:border-0">
-                    <td className="py-2.5 pr-4 font-medium text-text">{m.symbol}</td>
-                    <td className="tabular py-2.5 pr-4 text-right text-text-dim">
-                      {m.quantity.toLocaleString("tr-TR", { maximumFractionDigits: 2 })}
-                    </td>
-                    <td className="tabular py-2.5 pr-4 text-right text-text-dim">
-                      {m.avg_cost.toLocaleString("tr-TR", { maximumFractionDigits: 2 })}
-                    </td>
-                    <td className="tabular py-2.5 pr-4 text-right text-text">
-                      {m.price.toLocaleString("tr-TR", { maximumFractionDigits: 2 })}
-                    </td>
-                    <td
-                      className={`tabular py-2.5 pr-4 text-right ${m.change_pct >= 0 ? "text-pos" : "text-neg"}`}
-                    >
-                      {fmtPct(m.change_pct)}
-                    </td>
-                    <td className="tabular py-2.5 pr-4 text-right text-text">
-                      {fmtMoney(m.value, m.currency)}
-                    </td>
-                    <td
-                      className={`tabular py-2.5 pr-4 text-right ${m.pnl >= 0 ? "text-pos" : "text-neg"}`}
-                    >
-                      {fmtMoney(m.pnl, m.currency)}
-                    </td>
-                    <td
-                      className={`tabular py-2.5 pr-4 text-right ${m.pnl_pct >= 0 ? "text-pos" : "text-neg"}`}
-                    >
-                      {fmtPct(m.pnl_pct)}
-                    </td>
-                    <td className="tabular py-2.5 pr-4 text-right text-text-dim">
-                      %{(m.weight * 100).toFixed(1)}
-                    </td>
-                    <td className="py-2.5 text-right">
-                      <DeletePositionButton symbol={m.symbol} />
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
+          <PositionsTable metrics={metrics} />
         )}
       </Panel>
     </>

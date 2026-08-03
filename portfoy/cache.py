@@ -1,15 +1,13 @@
-"""Pluggable TTL cache, replacing Streamlit's ``st.cache_data`` outside a
-Streamlit process.
+"""Pluggable TTL cache for market data.
 
 Vercel Python functions are stateless between invocations, so an in-process
-dict does not survive a cold start the way it does inside Streamlit's
-long-running server. Upstash's Redis REST API does. The backend is picked
-automatically: Upstash when ``UPSTASH_REDIS_REST_URL`` /
-``UPSTASH_REDIS_REST_TOKEN`` are set (the historical naming) or, failing
-that, ``KV_REST_API_URL`` / ``KV_REST_API_TOKEN`` (what the current Vercel
-Marketplace "Upstash for Redis" integration actually provisions), otherwise
-an in-process dict (correct for Streamlit, and for local dev/tests where no
-Upstash project exists yet).
+dict does not survive a cold start the way it would on a long-running local
+server. Upstash's Redis REST API does. The backend is picked automatically:
+Upstash when ``UPSTASH_REDIS_REST_URL`` / ``UPSTASH_REDIS_REST_TOKEN`` are
+set (the historical naming) or, failing that, ``KV_REST_API_URL`` /
+``KV_REST_API_TOKEN`` (what the current Vercel Marketplace "Upstash for
+Redis" integration actually provisions), otherwise an in-process dict
+(correct for local dev/tests where no Upstash project exists yet).
 
 Caching is a performance optimization, never a correctness dependency: any
 backend failure (network error, corrupt entry) is swallowed and the wrapped
@@ -41,7 +39,7 @@ class CacheBackend(Protocol):
 
 
 class InProcessBackend:
-    """One dict per process. Lost on cold start -- fine for Streamlit, fine
+    """One dict per process. Lost on cold start -- fine for local dev, fine
     as the Upstash fallback, fine for tests."""
 
     def __init__(self, now: Callable[[], float] = time.time) -> None:
