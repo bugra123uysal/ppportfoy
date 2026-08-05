@@ -6,10 +6,17 @@ from portfoy import trade_scan
 from portfoy.indicators import atr
 from portfoy.trade_scan import (
     TradeSignal,
+    _crossed_down,
     _crossed_up,
-    _group1_momentum_volume_bands,
-    _group2_trend_deviation_stochrsi,
-    _group3_flip_and_trend,
+    _group1_buy_momentum_volume_bands,
+    _group1_sell_momentum_volume_bands,
+    _group2_buy_trend_deviation_stochrsi,
+    _group2_sell_trend_deviation_stochrsi,
+    _group3_buy_flip_and_trend,
+    _group3_sell_flip_and_trend,
+    _group4_buy_stochrsi_ema_median,
+    _group4_sell_stochrsi_ema,
+    _median_trend_up,
     build_trade_scan,
 )
 
@@ -69,6 +76,59 @@ _GROUP2_CLOSE = [
 # Magic / KJ MAGIC "blue").
 _GROUP3_CLOSE = [*np.linspace(200, 100, N - 1).tolist(), 140.0]
 
+# A 35-bar uptrend feeding Stochastic RSI's warmup, then a 25-bar dip/rally
+# tail -- calibrated (via randomized search, not hand-derived like the
+# fixtures above) so that on the final bar: the 3-period Median indicator
+# reads bullish (median of hl2 above its own EMA) *and* %K of the 14d
+# Stochastic RSI crosses up through its own 14d EMA. Group 4's confirming
+# indicators only become valid a handful of bars before the end (Stoch
+# RSI -> its EMA needs ~14+14+14 bars of warmup), so unlike Groups 1-3 this
+# fixture can't be described as a simple trend shape -- it's the shortest
+# series found where both conditions land on the same final bar.
+_GROUP4_BUY_CLOSE = [
+    100.0, 100.8824, 101.7647, 102.6471, 103.5294, 104.4118, 105.2941, 106.1765, 107.0588,
+    107.9412, 108.8235, 109.7059, 110.5882, 111.4706, 112.3529, 113.2353, 114.1176, 115.0,
+    115.8824, 116.7647, 117.6471, 118.5294, 119.4118, 120.2941, 121.1765, 122.0588, 122.9412,
+    123.8235, 124.7059, 125.5882, 126.4706, 127.3529, 128.2353, 129.1176, 130.0, 128.5158,
+    130.7082, 134.1262, 137.519, 143.2725, 142.417, 144.3495, 143.5508, 139.5763, 137.7647,
+    138.4732, 136.0277, 135.7533, 139.414, 141.4254, 143.4424, 144.7778, 144.5519, 139.2487,
+    142.5231, 138.3031, 139.2514, 139.2262, 139.938, 140.995,
+]
+
+
+def _mirror(prices: list[float]) -> list[float]:
+    """Reflect a price series about 150 -- turns every bullish fixture above
+    into its bearish mirror image (uptrend <-> downtrend, dip <-> rally,
+    green <-> red final candle), since every indicator used by Groups 1-4
+    (SMI, Bollinger, EMA, StochRSI, CCI, the ATR trailing stop, the Median
+    indicator) is a function of price differences/ratios and so behaves
+    symmetrically under this reflection.
+    """
+    return [300.0 - p for p in prices]
+
+
+# Bearish mirror of _GROUP1_CLOSE/_OPEN/_VOLUME: an uptrend, then a sharp
+# last-bar drop on a red candle + volume spike -- SMI turns down from
+# above zero, closing below its signal line, with a Bollinger break below
+# the mid band.
+_GROUP1_SELL_CLOSE = _mirror(_GROUP1_CLOSE)
+_GROUP1_SELL_OPEN = [*_GROUP1_SELL_CLOSE[:-1], 200.0]
+_GROUP1_SELL_VOLUME = _GROUP1_VOLUME
+
+# Bearish mirror of _GROUP2_CLOSE: a downtrend (21d EMA falling) with an
+# 8-bar relief-rally tail ending >5% above that EMA, and Stochastic RSI
+# %K crossing back below %D on the final bar.
+_GROUP2_SELL_CLOSE = _mirror(_GROUP2_CLOSE)
+
+# Bearish mirror of _GROUP3_CLOSE: a steady uptrend, then a sharp last-bar
+# drop -- an ATR trailing-stop (UT Bot) flip to sell, with CCI negative.
+_GROUP3_SELL_CLOSE = _mirror(_GROUP3_CLOSE)
+
+# Bearish mirror of _GROUP4_BUY_CLOSE: %K crosses down through its own EMA
+# on the final bar (Group 4's sell side needs no Median confirmation, per
+# the module docstring, but the mirror still reads Median-bearish too).
+_GROUP4_SELL_CLOSE = _mirror(_GROUP4_BUY_CLOSE)
+
 
 class TestCrossedUp:
     def test_true_on_fresh_cross(self):
@@ -87,46 +147,159 @@ class TestCrossedUp:
         assert _crossed_up(pd.Series([np.nan, 5.0]), pd.Series([2.0, 3.0])) is False
 
 
-class TestGroup1MomentumVolumeBands:
+class TestCrossedDown:
+    def test_true_on_fresh_cross(self):
+        assert _crossed_down(pd.Series([5.0, 1.0]), pd.Series([2.0, 3.0])) is True
+
+    def test_false_when_already_below(self):
+        assert _crossed_down(pd.Series([1.0, 0.5]), pd.Series([2.0, 3.0])) is False
+
+    def test_false_when_still_above(self):
+        assert _crossed_down(pd.Series([5.0, 4.0]), pd.Series([2.0, 3.0])) is False
+
+    def test_false_on_short_series(self):
+        assert _crossed_down(pd.Series([2.0]), pd.Series([1.0])) is False
+
+    def test_false_on_nan(self):
+        assert _crossed_down(pd.Series([np.nan, 1.0]), pd.Series([2.0, 3.0])) is False
+
+
+class TestGroup1BuyMomentumVolumeBands:
     def test_fires_on_engineered_reversal(self):
         df = _frame(_GROUP1_CLOSE, _GROUP1_OPEN, _GROUP1_VOLUME)
-        assert _group1_momentum_volume_bands(df) is True
+        assert _group1_buy_momentum_volume_bands(df) is True
 
     def test_false_on_flat_series(self):
         df = _frame(np.full(N, 100.0).tolist())
-        assert _group1_momentum_volume_bands(df) is False
+        assert _group1_buy_momentum_volume_bands(df) is False
 
     def test_false_without_volume_confirmation(self):
         # Same reversal, but volume never exceeds its 20d average.
         df = _frame(_GROUP1_CLOSE, _GROUP1_OPEN, [1000.0] * N)
-        assert _group1_momentum_volume_bands(df) is False
+        assert _group1_buy_momentum_volume_bands(df) is False
 
 
-class TestGroup2TrendDeviationStochRsi:
+class TestGroup1SellMomentumVolumeBands:
+    def test_fires_on_engineered_reversal(self):
+        df = _frame(_GROUP1_SELL_CLOSE, _GROUP1_SELL_OPEN, _GROUP1_SELL_VOLUME)
+        assert _group1_sell_momentum_volume_bands(df) is True
+
+    def test_false_on_flat_series(self):
+        df = _frame(np.full(N, 100.0).tolist())
+        assert _group1_sell_momentum_volume_bands(df) is False
+
+    def test_false_without_volume_confirmation(self):
+        # Same reversal, but volume never exceeds its 20d average.
+        df = _frame(_GROUP1_SELL_CLOSE, _GROUP1_SELL_OPEN, [1000.0] * N)
+        assert _group1_sell_momentum_volume_bands(df) is False
+
+
+class TestGroup2BuyTrendDeviationStochRsi:
     def test_fires_on_engineered_pullback(self):
         df = _frame(_GROUP2_CLOSE)
-        assert _group2_trend_deviation_stochrsi(df) is True
+        assert _group2_buy_trend_deviation_stochrsi(df) is True
 
     def test_false_on_clean_uptrend_no_dip(self):
         close = np.linspace(100, 150, N).tolist()
         df = _frame(close)
-        assert _group2_trend_deviation_stochrsi(df) is False
+        assert _group2_buy_trend_deviation_stochrsi(df) is False
 
     def test_false_on_downtrend(self):
         close = np.linspace(150, 100, N).tolist()
         df = _frame(close)
-        assert _group2_trend_deviation_stochrsi(df) is False
+        assert _group2_buy_trend_deviation_stochrsi(df) is False
 
 
-class TestGroup3FlipAndTrend:
+class TestGroup2SellTrendDeviationStochRsi:
+    def test_fires_on_engineered_rally(self):
+        df = _frame(_GROUP2_SELL_CLOSE)
+        assert _group2_sell_trend_deviation_stochrsi(df) is True
+
+    def test_false_on_clean_downtrend_no_rally(self):
+        close = np.linspace(150, 100, N).tolist()
+        df = _frame(close)
+        assert _group2_sell_trend_deviation_stochrsi(df) is False
+
+    def test_false_on_uptrend(self):
+        close = np.linspace(100, 150, N).tolist()
+        df = _frame(close)
+        assert _group2_sell_trend_deviation_stochrsi(df) is False
+
+
+class TestGroup3BuyFlipAndTrend:
     def test_fires_on_engineered_flip(self):
         df = _frame(_GROUP3_CLOSE)
-        assert _group3_flip_and_trend(df) is True
+        assert _group3_buy_flip_and_trend(df) is True
 
     def test_false_on_pure_downtrend(self):
         close = np.linspace(150, 100, N).tolist()
         df = _frame(close)
-        assert _group3_flip_and_trend(df) is False
+        assert _group3_buy_flip_and_trend(df) is False
+
+
+class TestGroup3SellFlipAndTrend:
+    def test_fires_on_engineered_flip(self):
+        df = _frame(_GROUP3_SELL_CLOSE)
+        assert _group3_sell_flip_and_trend(df) is True
+
+    def test_false_on_pure_uptrend(self):
+        close = np.linspace(100, 150, N).tolist()
+        df = _frame(close)
+        assert _group3_sell_flip_and_trend(df) is False
+
+
+class TestMedianTrendUp:
+    def test_true_on_uptrend(self):
+        df = _frame(np.linspace(100, 150, N).tolist())
+        assert _median_trend_up(df) is True
+
+    def test_false_on_downtrend(self):
+        df = _frame(np.linspace(150, 100, N).tolist())
+        assert _median_trend_up(df) is False
+
+    def test_none_on_insufficient_history(self):
+        df = _frame([100.0, 101.0])
+        assert _median_trend_up(df) is None
+
+
+class TestGroup4BuyStochRsiEmaMedian:
+    def test_fires_on_engineered_reversal(self):
+        df = _frame(_GROUP4_BUY_CLOSE)
+        assert _group4_buy_stochrsi_ema_median(df) is True
+
+    def test_false_on_flat_series(self):
+        df = _frame(np.full(N, 100.0).tolist())
+        assert _group4_buy_stochrsi_ema_median(df) is False
+
+    def test_false_without_median_confirmation(self):
+        # Same Close series as the fixture above (so %K still crosses up
+        # through its own EMA), but High/Low decoupled from Close into a
+        # plain downtrend -- Median (which reads hl2, not Close) is
+        # bearish, so the buy side must not fire even though the
+        # Stochastic RSI leg alone would qualify.
+        close = np.array(_GROUP4_BUY_CLOSE)
+        decoupled = np.linspace(150, 100, N)
+        df = pd.DataFrame(
+            {
+                "Open": close,
+                "High": decoupled + 1.0,
+                "Low": decoupled - 1.0,
+                "Close": close,
+                "Volume": np.full(N, 1000.0),
+            }
+        )
+        assert _median_trend_up(df) is False
+        assert _group4_buy_stochrsi_ema_median(df) is False
+
+
+class TestGroup4SellStochRsiEma:
+    def test_fires_on_engineered_reversal(self):
+        df = _frame(_GROUP4_SELL_CLOSE)
+        assert _group4_sell_stochrsi_ema(df) is True
+
+    def test_false_on_flat_series(self):
+        df = _frame(np.full(N, 100.0).tolist())
+        assert _group4_sell_stochrsi_ema(df) is False
 
 
 class TestBuildTradeScan:
@@ -153,6 +326,7 @@ class TestBuildTradeScan:
         signal = out[0]
         assert isinstance(signal, TradeSignal)
         assert signal.sector == "Enerji"
+        assert signal.direction == "long"
         # This close series is a downtrend-then-jump, which happens to also
         # satisfy Group 3's ATR-flip condition -- a stock can qualify for
         # more than one group at once, which is the strongest kind of match.
@@ -164,3 +338,38 @@ class TestBuildTradeScan:
         ).iloc[-1]
         assert signal.atr_14 == pytest.approx(expected_atr)
         assert signal.suggested_stop == pytest.approx(round(125.0 - expected_atr * 1.5, 2))
+
+    def test_includes_and_labels_short_signals(self, monkeypatch):
+        histories = {
+            "AAA": _frame(_GROUP1_SELL_CLOSE, _GROUP1_SELL_OPEN, _GROUP1_SELL_VOLUME),
+        }
+        monkeypatch.setattr(
+            trade_scan.data, "get_history", lambda sym, period=None: histories[sym]
+        )
+        out = build_trade_scan({"AAA": "Enerji"})
+        assert [s.symbol for s in out] == ["AAA"]
+
+        signal = out[0]
+        assert signal.direction == "short"
+        # Mirror of the long fixture above: also satisfies Group 3's
+        # bearish ATR-flip condition.
+        assert signal.groups == [1, 3]
+        assert signal.price == pytest.approx(175.0)
+
+        expected_atr = atr(
+            histories["AAA"]["High"], histories["AAA"]["Low"], histories["AAA"]["Close"], 14
+        ).iloc[-1]
+        assert signal.suggested_stop == pytest.approx(round(175.0 + expected_atr * 1.5, 2))
+
+    def test_symbol_can_produce_both_a_long_and_a_short_signal(self, monkeypatch):
+        # Group 1 buy (SMI-driven) and Group 2 sell (EMA-trend-driven)
+        # check unrelated indicators, so nothing stops a symbol from
+        # qualifying on both sides on the same day -- each direction must
+        # still surface as its own independent TradeSignal.
+        df = _frame(_GROUP1_CLOSE, _GROUP1_OPEN, _GROUP1_VOLUME)
+        monkeypatch.setattr(trade_scan, "_group2_sell_trend_deviation_stochrsi", lambda _df: True)
+        monkeypatch.setattr(trade_scan.data, "get_history", lambda sym, period=None: df)
+
+        out = build_trade_scan({"AAA": "Enerji"})
+        assert {s.direction for s in out} == {"long", "short"}
+        assert len(out) == 2

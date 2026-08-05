@@ -68,6 +68,18 @@ def volume_sma(volume: pd.Series, period: int = 20) -> pd.Series:
     return sma(volume, period)
 
 
+def median_price(high: pd.Series, low: pd.Series, period: int = 3) -> pd.Series:
+    """TradingView's built-in "Median" indicator's core line: the rolling
+    statistical median (not a moving average) of hl2 over `period` bars.
+    Its ATR-based envelope bands are a pure display feature (the source
+    notes explicitly hide them) and carry no signal, so they're not
+    modeled here -- only this line, compared against its own EMA by the
+    caller, is used.
+    """
+    hl2 = (high + low) / 2.0
+    return hl2.rolling(window=period, min_periods=period).median()
+
+
 def bollinger_bands(
     close: pd.Series, period: int = 20, num_std: float = 2.0
 ) -> tuple[pd.Series, pd.Series, pd.Series]:

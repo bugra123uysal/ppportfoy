@@ -108,6 +108,7 @@ export interface TradeSignal {
   sector: string;
   price: number;
   change_1d: number;
+  direction: "long" | "short";
   groups: number[];
   atr_14: number | null;
   suggested_stop: number | null;

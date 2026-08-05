@@ -150,10 +150,17 @@ TRADE_SCAN_CACHE_TTL = 3600
 SMI_PERIOD, SMI_SIGNAL = 10, 3
 BB_PERIOD, BB_STD = 20, 2.0
 MAD_OVERSOLD_PCT = -5.0        # close this far below its own 21d EMA = "aşırı ucuz" dip
+MAD_OVERBOUGHT_PCT = 5.0       # close this far above its own 21d EMA (downtrend) = overbought rally
 STOCH_RSI_PERIOD = 14
 UT_BOT_ATR_PERIOD, UT_BOT_KEY_VALUE = 10, 2.0   # QuantNomad's public defaults
 TREND_MAGIC_CCI_PERIOD = 20
 STOP_ATR_MULT = 1.5           # suggested stop = last close - ATR14 * this
+
+# Group 4: TradingView's built-in "Median" indicator (hl2 median vs its own
+# EMA, same length -- default length 3) confirming a Stochastic RSI value
+# crossing its own added EMA (14d, per the source notes).
+MEDIAN_PERIOD = 3
+GROUP4_RSI_EMA_PERIOD = 14
 
 # --- My Trade: sermaye akışı (money flow) ----------------------------------
 # Same scan universe as the indicator screener above. Combines a daily

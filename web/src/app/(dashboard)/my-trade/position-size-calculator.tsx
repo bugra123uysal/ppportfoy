@@ -13,15 +13,21 @@ export function PositionSizeCalculator({ prefill }: { prefill: TradeSignal | nul
   const [stop, setStop] = useState("");
   const [riskPct, setRiskPct] = useState(String(DEFAULT_RISK_PCT));
   // Adjust entry/stop when a *new* prefill arrives, without clobbering
-  // further manual edits -- tracking the last-applied symbol during render
-  // (React's documented pattern for "adjust state when a prop changes")
-  // instead of an effect, which would set state after an extra render.
-  const [appliedSymbol, setAppliedSymbol] = useState<string | null>(null);
-  if (prefill && prefill.symbol !== appliedSymbol) {
-    setAppliedSymbol(prefill.symbol);
-    setEntry(String(prefill.price));
-    if (prefill.suggested_stop !== null) {
-      setStop(String(prefill.suggested_stop));
+  // further manual edits -- tracking the last-applied symbol+direction key
+  // during render (React's documented pattern for "adjust state when a
+  // prop changes") instead of an effect, which would set state after an
+  // extra render. Keyed on direction too: the same symbol can appear in
+  // both the long and short tables, and re-picking it from the other
+  // table must still refresh entry/stop.
+  const [appliedKey, setAppliedKey] = useState<string | null>(null);
+  if (prefill) {
+    const key = `${prefill.symbol}:${prefill.direction}`;
+    if (key !== appliedKey) {
+      setAppliedKey(key);
+      setEntry(String(prefill.price));
+      if (prefill.suggested_stop !== null) {
+        setStop(String(prefill.suggested_stop));
+      }
     }
   }
 
@@ -29,7 +35,10 @@ export function PositionSizeCalculator({ prefill }: { prefill: TradeSignal | nul
   const entryPrice = Number(entry);
   const stopPrice = Number(stop);
   const risk = Number(riskPct);
-  const stopDistance = entryPrice - stopPrice;
+  // Long: stop sits below entry. Short: stop sits above entry (the price
+  // rising is the risk). The distance that matters for sizing is always
+  // the absolute gap between the two, regardless of direction.
+  const stopDistance = Math.abs(entryPrice - stopPrice);
   const isValid =
     Number.isFinite(portfolio) &&
     Number.isFinite(entryPrice) &&
@@ -49,8 +58,11 @@ export function PositionSizeCalculator({ prefill }: { prefill: TradeSignal | nul
       <div className="flex flex-col gap-5">
         {prefill && (
           <p className="text-xs text-text-faint">
-            <span className="font-medium text-text">{prefill.symbol}</span> için dolduruldu — stop
-            önerisi ATR(14) tabanlıdır, gerekirse elle değiştir.
+            <span className="font-medium text-text">{prefill.symbol}</span> (
+            {prefill.direction === "short" ? "short" : "long"}) için dolduruldu — stop önerisi
+            ATR(14) tabanlıdır, gerekirse elle değiştir.
+            {prefill.direction === "short" &&
+              " Short'ta stop girişin üzerindedir; açığa satış borç/marj uygunluğunu brokerinden kontrol et."}
           </p>
         )}
         <div className="flex flex-wrap items-end gap-3">
@@ -100,7 +112,7 @@ export function PositionSizeCalculator({ prefill }: { prefill: TradeSignal | nul
           </div>
         ) : (
           <p className="text-xs text-text-faint">
-            Giriş fiyatı stop fiyatından büyük olmalı; tüm alanları doldur.
+            Giriş fiyatı stop fiyatına eşit olmamalı; tüm alanları doldur.
           </p>
         )}
       </div>
