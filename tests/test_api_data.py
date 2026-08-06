@@ -12,7 +12,7 @@ import pandas as pd
 import pytest
 
 from portfoy import api_data, config
-from portfoy.data import Quote
+from portfoy.data import AnalystView, Quote
 from portfoy.options import OptionActivity
 from portfoy.storage import CashHolding, Position
 
@@ -201,6 +201,51 @@ class TestMacroPayload:
     def test_delegates_to_data(self, monkeypatch):
         monkeypatch.setattr(api_data.data, "get_macro_snapshot", lambda: [{"symbol": "^VIX"}])
         assert api_data.macro_payload() == [{"symbol": "^VIX"}]
+
+
+class TestYieldCurvePayload:
+    def test_computes_spread_and_inversion(self, monkeypatch):
+        monkeypatch.setattr(
+            api_data.data, "get_quotes",
+            lambda symbols: {
+                config.YIELD_10Y_TICKER: Quote(config.YIELD_10Y_TICKER, 4.0, 4.0, 0.0),
+                config.YIELD_3M_TICKER: Quote(config.YIELD_3M_TICKER, 5.0, 5.0, 0.0),
+            },
+        )
+        monkeypatch.setattr(api_data.data, "get_history", lambda sym, period=None: pd.DataFrame())
+        snap = api_data.yield_curve_payload()
+        assert snap.yield_10y == pytest.approx(4.0)
+        assert snap.yield_3m == pytest.approx(5.0)
+        assert snap.spread_10y_3m == pytest.approx(-1.0)
+        assert snap.inverted is True
+        assert snap.credit_spread_proxy_change is None
+
+    def test_missing_quotes_still_returns_snapshot(self, monkeypatch):
+        monkeypatch.setattr(api_data.data, "get_quotes", lambda symbols: {})
+        monkeypatch.setattr(api_data.data, "get_history", lambda sym, period=None: pd.DataFrame())
+        snap = api_data.yield_curve_payload()
+        assert snap.spread_10y_3m is None
+        assert snap.inverted is False
+
+
+class TestAnalystPayload:
+    def test_only_us_symbols_are_queried(self, monkeypatch):
+        monkeypatch.setattr(api_data.storage, "load_portfolio", lambda: [AAPL, THYAO])
+        queried: list[str] = []
+
+        def fake_view(sym):
+            queried.append(sym)
+            return AnalystView(300.0, 350.0, 250.0, "al", 20)
+
+        monkeypatch.setattr(api_data.data, "get_analyst_view", fake_view)
+        out = api_data.analyst_payload()
+        assert queried == ["AAPL"]
+        assert out == {"AAPL": AnalystView(300.0, 350.0, 250.0, "al", 20)}
+
+    def test_symbols_with_no_view_are_omitted(self, monkeypatch):
+        monkeypatch.setattr(api_data.storage, "load_portfolio", lambda: [AAPL])
+        monkeypatch.setattr(api_data.data, "get_analyst_view", lambda sym: None)
+        assert api_data.analyst_payload() == {}
 
 
 class TestCalendarPayload:

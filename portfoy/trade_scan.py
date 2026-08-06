@@ -71,6 +71,8 @@ from .indicators import (
     ema,
     median_price,
     pct_change_last,
+    pct_from_52w_high,
+    pct_from_52w_low,
     stochastic_momentum_index,
     stochastic_rsi,
     ut_bot_trailing_stop,
@@ -88,6 +90,9 @@ class TradeSignal:
     groups: list[int]              # e.g. [1, 3] -- which of Group 1-4 currently qualify
     atr_14: float | None
     suggested_stop: float | None   # long: price - atr_14*mult; short: price + atr_14*mult
+    pct_from_52w_high: float | None    # <=0; 0 = sitting at the 52-week high
+    pct_from_52w_low: float | None     # >=0; 0 = sitting at the 52-week low
+    weekly_trend_aligned: bool | None  # weekly EMA agrees with direction; None = not enough history
 
 
 def _crossed_up(series: pd.Series, other: pd.Series) -> bool:
@@ -252,6 +257,22 @@ def _atr_last(df: pd.DataFrame) -> float | None:
     return None if atr14.empty or pd.isna(atr14.iloc[-1]) else float(atr14.iloc[-1])
 
 
+def _weekly_trend_up(df: pd.DataFrame) -> bool | None:
+    """Weekly EMA direction, resampled from the same daily frame already
+    fetched for the daily setups -- no extra network call. None means not
+    enough weekly history yet to judge, not "flat"."""
+    if not isinstance(df.index, pd.DatetimeIndex):
+        return None
+    weekly = df["Close"].resample("W").last().dropna()
+    period = config.WEEKLY_TREND_EMA
+    if len(weekly) < period + 6:
+        return None
+    weekly_ema = ema(weekly, period)
+    if weekly_ema.iloc[-6:].isna().any():
+        return None
+    return bool(weekly_ema.iloc[-1] > weekly_ema.iloc[-6])
+
+
 def build_trade_scan(universe: dict[str, str]) -> list[TradeSignal]:
     """Scan `universe` (ticker -> sector label) and group matches by setup.
 
@@ -292,6 +313,9 @@ def build_trade_scan(universe: dict[str, str]) -> list[TradeSignal]:
         price = float(df["Close"].iloc[-1])
         atr_last = _atr_last(df)
         change_1d = pct_change_last(df["Close"])
+        high52 = pct_from_52w_high(df["Close"], config.WEEK_52_TRADING_DAYS)
+        low52 = pct_from_52w_low(df["Close"], config.WEEK_52_TRADING_DAYS)
+        weekly_up = _weekly_trend_up(df)
 
         if long_groups:
             suggested_stop = (
@@ -307,6 +331,9 @@ def build_trade_scan(universe: dict[str, str]) -> list[TradeSignal]:
                     groups=long_groups,
                     atr_14=atr_last,
                     suggested_stop=suggested_stop,
+                    pct_from_52w_high=high52,
+                    pct_from_52w_low=low52,
+                    weekly_trend_aligned=weekly_up,
                 )
             )
         if short_groups:
@@ -323,6 +350,9 @@ def build_trade_scan(universe: dict[str, str]) -> list[TradeSignal]:
                     groups=short_groups,
                     atr_14=atr_last,
                     suggested_stop=suggested_stop,
+                    pct_from_52w_high=high52,
+                    pct_from_52w_low=low52,
+                    weekly_trend_aligned=(None if weekly_up is None else not weekly_up),
                 )
             )
     return results

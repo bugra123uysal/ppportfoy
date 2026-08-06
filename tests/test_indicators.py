@@ -13,6 +13,8 @@ from portfoy.indicators import (
     money_flow_index,
     on_balance_volume,
     pct_change_last,
+    pct_from_52w_high,
+    pct_from_52w_low,
     rsi,
     sma,
     stochastic_momentum_index,
@@ -219,3 +221,40 @@ class TestOnBalanceVolume:
         volume = pd.Series(np.full(30, 1000.0))
         obv = on_balance_volume(flat, volume)
         assert (obv == 0).all()
+
+
+class TestPctFrom52wHigh:
+    def test_at_the_high_is_zero(self):
+        close = pd.Series(np.linspace(100.0, 200.0, 260))
+        assert pct_from_52w_high(close) == pytest.approx(0.0)
+
+    def test_below_the_high_is_negative(self):
+        close = pd.Series([*np.linspace(100.0, 200.0, 259), 180.0])
+        value = pct_from_52w_high(close)
+        assert value is not None
+        assert value < 0
+        assert value == pytest.approx((180.0 / 200.0 - 1.0) * 100.0)
+
+    def test_only_looks_within_window(self):
+        # An old spike outside the window shouldn't suppress a new high.
+        close = pd.Series([500.0, *np.linspace(100.0, 200.0, 259)])
+        assert pct_from_52w_high(close, window=259) == pytest.approx(0.0)
+
+    def test_empty_returns_none(self):
+        assert pct_from_52w_high(pd.Series(dtype=float)) is None
+
+
+class TestPctFrom52wLow:
+    def test_at_the_low_is_zero(self):
+        close = pd.Series(np.linspace(200.0, 100.0, 260))
+        assert pct_from_52w_low(close) == pytest.approx(0.0)
+
+    def test_above_the_low_is_positive(self):
+        close = pd.Series([*np.linspace(200.0, 100.0, 259), 120.0])
+        value = pct_from_52w_low(close)
+        assert value is not None
+        assert value > 0
+        assert value == pytest.approx((120.0 / 100.0 - 1.0) * 100.0)
+
+    def test_empty_returns_none(self):
+        assert pct_from_52w_low(pd.Series(dtype=float)) is None

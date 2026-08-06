@@ -88,6 +88,22 @@ SENT_PCR_FEAR = 1.5          # SPY put/call at/above this scores 0
 SENT_PCR_GREED = 0.5         # at/below this scores 100
 SENT_MOMENTUM_SMA = 125      # S&P vs its ~6-month average
 
+# --- Market compass: yield curve / credit spread ----------------------------
+# NY Fed's own recession-probability model uses the 3-month/10-year spread
+# (not the more commonly cited 2s10s) -- both tickers are standard CBOE
+# treasury-yield indices on Yahoo, quoted directly in percent.
+YIELD_10Y_TICKER = "^TNX"
+YIELD_3M_TICKER = "^IRX"
+# HYG (high-yield corp) vs LQD (investment-grade corp): both are corporate
+# bond ETFs of similar duration profile, so their ratio isolates credit-risk
+# pricing better than HY-vs-Treasury would (which conflates credit and
+# pure interest-rate/duration risk).
+CREDIT_HY_TICKER = "HYG"
+CREDIT_IG_TICKER = "LQD"
+CREDIT_SPREAD_LOOKBACK = 20      # trading sessions (~1 month)
+CREDIT_STRESS_THRESHOLD = -3.0  # % ratio decline over the lookback flagged as stress
+YIELD_CURVE_CACHE_TTL = 1800
+
 # --- Market compass: economic calendar -------------------------------------
 # Official FOMC schedule (published by the Federal Reserve a year ahead).
 # Dates are the DECISION day (second day of the two-day meeting).
@@ -145,8 +161,15 @@ SECTOR_LEADERS_TOP_N = 5
 # Reuses SECTOR_LEADER_STOCKS (flattened, ticker -> sector) as the scan
 # universe, so results carry a sector label for free. Thresholds below are
 # standard TA convention, not backtested -- see portfoy/trade_scan.py.
-TRADE_SCAN_HISTORY_PERIOD = "6mo"
+# 1y (not 6mo) so a genuine 52-week high/low can be read off the same fetch
+# -- the two ema() calls used by Group 2/4 are exponentially-weighted over
+# all supplied history, but their half-life is single-digit days, so the
+# extra 6 months of lookback changes today's EMA value by a negligible,
+# unmeasurable amount while giving the 52-week fields real data to work with.
+TRADE_SCAN_HISTORY_PERIOD = "1y"
 TRADE_SCAN_CACHE_TTL = 3600
+WEEK_52_TRADING_DAYS = 252
+WEEKLY_TREND_EMA = 10           # weeks, for the multi-timeframe confirmation filter
 SMI_PERIOD, SMI_SIGNAL = 10, 3
 BB_PERIOD, BB_STD = 20, 2.0
 MAD_OVERSOLD_PCT = -5.0        # close this far below its own 21d EMA = "aşırı ucuz" dip

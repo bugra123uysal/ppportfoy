@@ -27,6 +27,8 @@ class BreadthSnapshot:
     decliners: int
     new_high_20d: int            # stocks at a 20-day high today
     new_low_20d: int
+    trin: float | None = None        # Arms Index: <1 bullish, >1 bearish
+    mcclellan: float | None = None   # McClellan Oscillator: breadth momentum
 
     @property
     def health(self) -> str:
@@ -70,7 +72,62 @@ def new_highs_lows(closes: pd.DataFrame, window: int = 20) -> tuple[int, int]:
     return highs, lows
 
 
-def build_snapshot(closes: pd.DataFrame) -> BreadthSnapshot | None:
+def trin(closes: pd.DataFrame, volumes: pd.DataFrame) -> float | None:
+    """Arms Index (TRIN): (advancers/decliners) / (up volume/down volume).
+
+    Below 1.0 = buying pressure concentrated in advancing names (bullish);
+    above 1.0 = volume piling into decliners (bearish) even if the simple
+    advance/decline count looks fine -- this is what breadth alone misses.
+    """
+    if len(closes) < 2 or volumes.empty:
+        return None
+    change = (closes.iloc[-1] - closes.iloc[-2]).dropna()
+    common = change.index.intersection(volumes.columns)
+    if len(common) == 0:
+        return None
+    change = change.loc[common]
+    vol_today = volumes.loc[:, common].iloc[-1]
+    advancers = change[change > 0].index
+    decliners = change[change < 0].index
+    if len(advancers) == 0 or len(decliners) == 0:
+        return None
+    up_vol = float(vol_today.reindex(advancers).sum())
+    down_vol = float(vol_today.reindex(decliners).sum())
+    if up_vol <= 0 or down_vol <= 0:
+        return None
+    ad_ratio = len(advancers) / len(decliners)
+    vol_ratio = up_vol / down_vol
+    return ad_ratio / vol_ratio
+
+
+def net_advances_series(closes: pd.DataFrame) -> pd.Series:
+    """Daily (advancers - decliners) count for every session after the first."""
+    if len(closes) < 2:
+        return pd.Series(dtype=float)
+    diff = closes.diff()
+    advancers = (diff > 0).sum(axis=1)
+    decliners = (diff < 0).sum(axis=1)
+    return (advancers - decliners).iloc[1:].astype(float)
+
+
+def mcclellan_oscillator(closes: pd.DataFrame, fast: int = 19, slow: int = 39) -> float | None:
+    """Difference between the 19d and 39d EMAs of net advances.
+
+    A momentum read on breadth itself: positive and rising means more stocks
+    are joining the move each day, not just holding a prior high count.
+    """
+    net = net_advances_series(closes)
+    if len(net) < slow:
+        return None
+    ema_fast = net.ewm(span=fast, adjust=False).mean()
+    ema_slow = net.ewm(span=slow, adjust=False).mean()
+    value = (ema_fast - ema_slow).iloc[-1]
+    return float(value) if pd.notna(value) else None
+
+
+def build_snapshot(
+    closes: pd.DataFrame, volumes: pd.DataFrame | None = None
+) -> BreadthSnapshot | None:
     """Latest breadth reading, or None when there is no usable data."""
     if closes.empty or len(closes) < 2:
         return None
@@ -86,4 +143,6 @@ def build_snapshot(closes: pd.DataFrame) -> BreadthSnapshot | None:
         decliners=decliners,
         new_high_20d=highs,
         new_low_20d=lows,
+        trin=trin(closes, volumes) if volumes is not None else None,
+        mcclellan=mcclellan_oscillator(closes),
     )

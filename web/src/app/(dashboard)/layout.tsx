@@ -1,4 +1,5 @@
 import { Sidebar } from "@/components/sidebar";
+import { RouteTransition } from "@/components/route-transition";
 
 // Every page under this layout fetches live portfolio/market data through the
 // "api" service binding, which only resolves at request time (never during
@@ -14,7 +15,7 @@ export default function DashboardLayout({
     <div className="flex min-h-screen flex-1">
       <Sidebar />
       <main className="flex-1 overflow-x-hidden px-8 py-8">
-        <div className="mx-auto flex max-w-6xl flex-col gap-8">{children}</div>
+        <RouteTransition>{children}</RouteTransition>
       </main>
     </div>
   );

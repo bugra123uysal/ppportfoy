@@ -175,6 +175,16 @@ def market_macro() -> Response:
     return _json_response(api_data.macro_payload())
 
 
+@app.get("/api/market/yield-curve")
+def market_yield_curve() -> Response:
+    return _json_response(api_data.yield_curve_payload())
+
+
+@app.get("/api/analyst")
+def analyst() -> Response:
+    return _json_response(api_data.analyst_payload())
+
+
 @app.get("/api/calendar")
 def calendar() -> Response:
     days = request.args.get("days", type=int) or config.CALENDAR_LOOKAHEAD_DAYS

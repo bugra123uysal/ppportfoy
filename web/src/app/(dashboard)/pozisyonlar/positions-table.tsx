@@ -45,7 +45,10 @@ export function PositionsTable({ metrics }: { metrics: PositionMetrics[] }) {
         </thead>
         <tbody>
           {sorted.map((m) => (
-            <tr key={m.symbol} className="border-b border-border/60 last:border-0">
+            <tr
+              key={m.symbol}
+              className="border-b border-border/60 transition-colors last:border-0 hover:bg-surface-2/60"
+            >
               <td className="py-2.5 pr-4 font-medium text-text">{m.symbol}</td>
               <td className="tabular py-2.5 pr-4 text-right text-text-dim">
                 {m.quantity.toLocaleString("tr-TR", { maximumFractionDigits: 2 })}

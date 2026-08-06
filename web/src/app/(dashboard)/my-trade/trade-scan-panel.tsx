@@ -8,7 +8,7 @@ import { fmtMoney, fmtPct } from "@/lib/format";
 import { useSort } from "@/lib/use-sort";
 import { runTradeScanAction } from "./actions";
 
-type SortKey = "symbol" | "sector" | "price" | "change_1d" | "suggested_stop";
+type SortKey = "symbol" | "sector" | "price" | "change_1d" | "suggested_stop" | "pct_from_52w_high";
 
 const ACCESSORS: Record<SortKey, (s: TradeSignal) => number | string> = {
   symbol: (s) => s.symbol,
@@ -16,7 +16,19 @@ const ACCESSORS: Record<SortKey, (s: TradeSignal) => number | string> = {
   price: (s) => s.price,
   change_1d: (s) => s.change_1d,
   suggested_stop: (s) => s.suggested_stop ?? Number.NEGATIVE_INFINITY,
+  pct_from_52w_high: (s) => s.pct_from_52w_high ?? Number.NEGATIVE_INFINITY,
 };
+
+function WeeklyTrendBadge({ aligned }: { aligned: boolean | null }) {
+  if (aligned === null) {
+    return <span className="text-text-faint" title="Yeterli haftalık veri yok">—</span>;
+  }
+  return aligned ? (
+    <span className="text-pos" title="Haftalık trend bu sinyal yönünü doğruluyor">✓</span>
+  ) : (
+    <span className="text-neg" title="Haftalık trend bu sinyalin tersi yönde">✗</span>
+  );
+}
 
 const GROUP_COLOR: Record<number, string> = {
   1: "var(--pos)",
@@ -177,7 +189,7 @@ function GroupTable({
         <p className="text-xs text-text-faint">Şu an eşleşen hisse yok.</p>
       ) : (
         <div className="overflow-x-auto">
-          <table className="w-full min-w-[520px] border-collapse text-sm">
+          <table className="w-full min-w-[700px] border-collapse text-sm">
             <thead>
               <tr className="border-b border-border text-left text-xs text-text-faint">
                 <SortableTh label="Sembol" sortKey="symbol" {...thProps} />
@@ -185,6 +197,15 @@ function GroupTable({
                 <SortableTh label="Fiyat" sortKey="price" align="right" {...thProps} />
                 <SortableTh label="1G" sortKey="change_1d" align="right" {...thProps} />
                 <SortableTh label="Önerilen Stop" sortKey="suggested_stop" align="right" {...thProps} />
+                <SortableTh
+                  label="52h Zirveye Uzaklık"
+                  sortKey="pct_from_52w_high"
+                  align="right"
+                  {...thProps}
+                />
+                <th className="py-2 text-center font-medium" title="Haftalık trend bu sinyal yönünü onaylıyor mu?">
+                  Hafta
+                </th>
                 <th className="py-2 font-medium" />
               </tr>
             </thead>
@@ -203,6 +224,12 @@ function GroupTable({
                   </td>
                   <td className="tabular py-2.5 pr-4 text-right text-text-dim">
                     {s.suggested_stop !== null ? fmtMoney(s.suggested_stop, "USD") : "—"}
+                  </td>
+                  <td className="tabular py-2.5 pr-4 text-right text-text-dim">
+                    {s.pct_from_52w_high !== null ? fmtPct(s.pct_from_52w_high, 1) : "—"}
+                  </td>
+                  <td className="py-2.5 text-center">
+                    <WeeklyTrendBadge aligned={s.weekly_trend_aligned} />
                   </td>
                   <td className="py-2.5 text-right">
                     <button

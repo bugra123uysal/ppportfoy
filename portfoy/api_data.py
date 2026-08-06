@@ -18,6 +18,7 @@ import pandas as pd
 from . import config, data, performance, risk, storage
 from .breadth import BreadthSnapshot, build_snapshot
 from .calendar_events import MarketEvent, upcoming_events
+from .data import AnalystView
 from .indicators import last_value, sma
 from .money_flow import build_money_flow_scan
 from .options import OptionActivity, rank_by_volume
@@ -26,6 +27,7 @@ from .risk import PositionMetrics
 from .rotation import build_rotation, build_sector_leaders
 from .sentiment import SentimentScore, build_score
 from .trade_scan import build_trade_scan
+from .yield_curve import YieldCurveSnapshot, build_yield_curve_snapshot, credit_spread_proxy_change
 
 
 def _load_metrics() -> tuple[list[PositionMetrics], list[storage.CashHolding], float | None]:
@@ -114,7 +116,41 @@ def options_scan_payload() -> list[OptionActivity]:
 
 def breadth_payload() -> BreadthSnapshot | None:
     closes = data.get_daily_closes(config.BREADTH_UNIVERSE)
-    return build_snapshot(closes)
+    if closes.empty:
+        return None
+    volumes = data.get_daily_volumes(config.BREADTH_UNIVERSE)
+    return build_snapshot(closes, volumes if not volumes.empty else None)
+
+
+def yield_curve_payload() -> YieldCurveSnapshot:
+    quotes = data.get_quotes((config.YIELD_10Y_TICKER, config.YIELD_3M_TICKER))
+    y10 = quotes.get(config.YIELD_10Y_TICKER)
+    y3m = quotes.get(config.YIELD_3M_TICKER)
+    hy = data.get_history(config.CREDIT_HY_TICKER, period="3mo")
+    ig = data.get_history(config.CREDIT_IG_TICKER, period="3mo")
+    credit_change = (
+        credit_spread_proxy_change(hy["Close"], ig["Close"])
+        if not hy.empty and not ig.empty
+        else None
+    )
+    return build_yield_curve_snapshot(
+        yield_10y=y10.price if y10 else None,
+        yield_3m=y3m.price if y3m else None,
+        credit_change_pct=credit_change,
+    )
+
+
+def analyst_payload() -> dict[str, AnalystView]:
+    """Analyst price targets/consensus for the user's US-listed holdings --
+    Yahoo doesn't cover BIST (.IS) names here, same exclusion as earnings."""
+    positions = storage.load_portfolio()
+    us_symbols = [p.symbol for p in positions if not p.symbol.endswith(".IS")]
+    out: dict[str, AnalystView] = {}
+    for sym in us_symbols:
+        view = data.get_analyst_view(sym)
+        if view is not None:
+            out[sym] = view
+    return out
 
 
 def sentiment_payload() -> SentimentScore | None:

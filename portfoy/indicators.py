@@ -53,6 +53,28 @@ def drawdown_from_peak(close: pd.Series) -> float:
     return (float(clean.iloc[-1]) / peak - 1.0) * 100.0
 
 
+def pct_from_52w_high(close: pd.Series, window: int = 252) -> float | None:
+    """% distance from the trailing `window`-session high close (<=0, 0 = at the high)."""
+    clean = close.dropna()
+    if clean.empty:
+        return None
+    high = float(clean.tail(window).max())
+    if high <= 0:
+        return None
+    return (float(clean.iloc[-1]) / high - 1.0) * 100.0
+
+
+def pct_from_52w_low(close: pd.Series, window: int = 252) -> float | None:
+    """% distance from the trailing `window`-session low close (>=0, 0 = at the low)."""
+    clean = close.dropna()
+    if clean.empty:
+        return None
+    low = float(clean.tail(window).min())
+    if low <= 0:
+        return None
+    return (float(clean.iloc[-1]) / low - 1.0) * 100.0
+
+
 def last_value(series: pd.Series) -> float | None:
     clean = series.dropna()
     if clean.empty:

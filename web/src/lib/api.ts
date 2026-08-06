@@ -71,6 +71,25 @@ export interface BreadthSnapshot {
   decliners: number;
   new_high_20d: number;
   new_low_20d: number;
+  trin: number | null;
+  mcclellan: number | null;
+}
+
+export interface YieldCurveSnapshot {
+  yield_10y: number | null;
+  yield_3m: number | null;
+  spread_10y_3m: number | null;
+  inverted: boolean;
+  credit_spread_proxy_change: number | null;
+  credit_stress: boolean;
+}
+
+export interface AnalystView {
+  target_mean: number | null;
+  target_high: number | null;
+  target_low: number | null;
+  consensus: "al" | "tut" | "sat" | null;
+  num_analysts: number | null;
 }
 
 export interface SentimentScore {
@@ -112,6 +131,9 @@ export interface TradeSignal {
   groups: number[];
   atr_14: number | null;
   suggested_stop: number | null;
+  pct_from_52w_high: number | null;
+  pct_from_52w_low: number | null;
+  weekly_trend_aligned: boolean | null;
 }
 
 export interface TradeScanPayload {
@@ -247,6 +269,14 @@ export function getBreadth(): Promise<BreadthSnapshot | null> {
 
 export function getSentiment(): Promise<SentimentScore | null> {
   return apiGet<SentimentScore | null>("/api/market/sentiment", 300);
+}
+
+export function getYieldCurve(): Promise<YieldCurveSnapshot> {
+  return apiGet<YieldCurveSnapshot>("/api/market/yield-curve", 1800);
+}
+
+export function getAnalystViews(): Promise<Record<string, AnalystView>> {
+  return apiGet<Record<string, AnalystView>>("/api/analyst", 21600);
 }
 
 export function getRotation(includeMine = false): Promise<RotationPayload> {

@@ -17,6 +17,7 @@ from portfoy.trade_scan import (
     _group4_buy_stochrsi_ema_median,
     _group4_sell_stochrsi_ema,
     _median_trend_up,
+    _weekly_trend_up,
     build_trade_scan,
 )
 
@@ -302,6 +303,34 @@ class TestGroup4SellStochRsiEma:
         assert _group4_sell_stochrsi_ema(df) is False
 
 
+class TestWeeklyTrendUp:
+    def _dated_frame(self, close: np.ndarray) -> pd.DataFrame:
+        index = pd.date_range("2024-01-01", periods=len(close), freq="B")
+        return pd.DataFrame(
+            {
+                "Open": close, "High": close + 1.0, "Low": close - 1.0, "Close": close,
+                "Volume": np.full(len(close), 1000.0),
+            },
+            index=index,
+        )
+
+    def test_none_without_datetime_index(self):
+        df = _frame(np.linspace(100, 200, N).tolist())
+        assert _weekly_trend_up(df) is None
+
+    def test_true_on_weekly_uptrend(self):
+        df = self._dated_frame(np.linspace(100.0, 300.0, 400))
+        assert _weekly_trend_up(df) is True
+
+    def test_false_on_weekly_downtrend(self):
+        df = self._dated_frame(np.linspace(300.0, 100.0, 400))
+        assert _weekly_trend_up(df) is False
+
+    def test_none_on_short_history(self):
+        df = self._dated_frame(np.linspace(100.0, 110.0, 30))
+        assert _weekly_trend_up(df) is None
+
+
 class TestBuildTradeScan:
     def test_skips_symbols_with_insufficient_history(self, monkeypatch):
         monkeypatch.setattr(trade_scan.data, "get_history", lambda sym, period=None: pd.DataFrame())
@@ -338,6 +367,11 @@ class TestBuildTradeScan:
         ).iloc[-1]
         assert signal.atr_14 == pytest.approx(expected_atr)
         assert signal.suggested_stop == pytest.approx(round(125.0 - expected_atr * 1.5, 2))
+        assert signal.pct_from_52w_high is not None and signal.pct_from_52w_high <= 0
+        assert signal.pct_from_52w_low is not None and signal.pct_from_52w_low >= 0
+        # _frame() fixtures use a plain integer index, not a DatetimeIndex,
+        # so weekly resampling can't run -- None, not True/False.
+        assert signal.weekly_trend_aligned is None
 
     def test_includes_and_labels_short_signals(self, monkeypatch):
         histories = {

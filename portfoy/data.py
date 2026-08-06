@@ -204,6 +204,32 @@ def get_daily_closes(symbols: tuple[str, ...], period: str = "1y") -> pd.DataFra
     return pd.DataFrame(columns) if columns else pd.DataFrame()
 
 
+@cached(ttl=config.BREADTH_CACHE_TTL, encode=_encode_price_frame, decode=_decode_price_frame)
+def get_daily_volumes(symbols: tuple[str, ...], period: str = "1y") -> pd.DataFrame:
+    """Daily volume for many symbols, one column per symbol (TRIN input)."""
+    if not symbols:
+        return pd.DataFrame()
+    try:
+        df = yf.download(
+            list(symbols), period=period, interval="1d",
+            auto_adjust=True, progress=False, group_by="ticker", threads=True,
+        )
+    except Exception:
+        return pd.DataFrame()
+    if df is None or df.empty:
+        return pd.DataFrame()
+    columns: dict[str, pd.Series] = {}
+    for sym in symbols:
+        try:
+            volume = (df[sym]["Volume"] if isinstance(df.columns, pd.MultiIndex)
+                      else df["Volume"]).dropna()
+            if not volume.empty:
+                columns[sym] = volume
+        except (KeyError, IndexError, TypeError):
+            continue
+    return pd.DataFrame(columns) if columns else pd.DataFrame()
+
+
 @cached(ttl=config.OPTIONS_CACHE_TTL, encode=_encode_activity, decode=_decode_activity)
 def get_option_activity(symbol: str):
     """Aggregated option activity for the nearest expiry. None when no chain."""
@@ -268,6 +294,85 @@ def get_ownership_flow(symbol: str) -> OwnershipFlow | None:
     if institutional_pct is None and insider_net_pct_6m is None:
         return None
     return OwnershipFlow(institutional_pct, insider_net_pct_6m)
+
+
+class AnalystView(NamedTuple):
+    target_mean: float | None
+    target_high: float | None
+    target_low: float | None
+    consensus: str | None      # "al" | "tut" | "sat" -- majority of current-month ratings
+    num_analysts: int | None
+
+
+def _encode_analyst(view: AnalystView | None) -> str:
+    return "" if view is None else json.dumps(list(view))
+
+
+def _decode_analyst(raw: str) -> AnalystView | None:
+    return None if not raw else AnalystView(*json.loads(raw))
+
+
+def _fetch_price_targets(ticker: yf.Ticker) -> tuple[float | None, float | None, float | None]:
+    try:
+        targets = ticker.analyst_price_targets
+    except Exception:
+        return None, None, None
+    if not targets:
+        return None, None, None
+    return (
+        _to_optional_float(targets.get("mean")),
+        _to_optional_float(targets.get("high")),
+        _to_optional_float(targets.get("low")),
+    )
+
+
+def _fetch_consensus(ticker: yf.Ticker) -> tuple[str | None, int | None]:
+    """Majority bucket (al/tut/sat) of the current-month analyst rating counts."""
+    try:
+        summary = ticker.recommendations_summary
+    except Exception:
+        return None, None
+    if summary is None or summary.empty:
+        return None, None
+    row = summary[summary["period"] == "0m"]
+    if row.empty:
+        return None, None
+    r = row.iloc[0]
+    buy = int(r.get("strongBuy", 0)) + int(r.get("buy", 0))
+    hold = int(r.get("hold", 0))
+    sell = int(r.get("sell", 0)) + int(r.get("strongSell", 0))
+    total = buy + hold + sell
+    if total == 0:
+        return None, None
+    buckets = (("al", buy), ("tut", hold), ("sat", sell))
+    return max(buckets, key=lambda kv: kv[1])[0], total
+
+
+@cached(ttl=config.OWNERSHIP_CACHE_TTL, encode=_encode_analyst, decode=_decode_analyst)
+def get_analyst_view(symbol: str) -> AnalystView | None:
+    """Analyst price targets + current-month buy/hold/sell consensus (Yahoo, free).
+
+    Two independent Yahoo reads, both allowed to fail on their own: a stock
+    can have price targets without a fresh ratings breakdown, or vice versa.
+    """
+    try:
+        ticker = yf.Ticker(symbol)
+    except Exception:
+        return None
+
+    target_mean, target_high, target_low = _fetch_price_targets(ticker)
+    consensus, num_analysts = _fetch_consensus(ticker)
+
+    if target_mean is None and consensus is None:
+        return None
+    return AnalystView(target_mean, target_high, target_low, consensus, num_analysts)
+
+
+def _to_optional_float(value: object) -> float | None:
+    try:
+        return None if value is None else float(value)  # type: ignore[arg-type]
+    except (TypeError, ValueError):
+        return None
 
 
 def symbol_exists(symbol: str) -> bool:

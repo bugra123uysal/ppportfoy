@@ -122,6 +122,17 @@ class TestRouteWiring:
         resp = client.get("/api/market/macro", headers=AUTH)
         assert resp.get_json() == [{"symbol": "^VIX"}]
 
+    def test_market_yield_curve(self, client, monkeypatch):
+        monkeypatch.setattr(api_index.api_data, "yield_curve_payload", lambda: {"inverted": False})
+        resp = client.get("/api/market/yield-curve", headers=AUTH)
+        assert resp.get_json() == {"inverted": False}
+
+    def test_analyst(self, client, monkeypatch):
+        payload = {"AAPL": {"consensus": "al"}}
+        monkeypatch.setattr(api_index.api_data, "analyst_payload", lambda: payload)
+        resp = client.get("/api/analyst", headers=AUTH)
+        assert resp.get_json() == payload
+
     def test_calendar_default_days(self, client, monkeypatch):
         captured = {}
         monkeypatch.setattr(api_index.api_data, "calendar_payload",

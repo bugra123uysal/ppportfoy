@@ -1,9 +1,10 @@
-import { getBreadth, getCalendar, getRotation, getSentiment } from "@/lib/api";
+import { getBreadth, getCalendar, getRotation, getSentiment, getYieldCurve } from "@/lib/api";
 import { Panel } from "@/components/panel";
 import { StatTile } from "@/components/stat-tile";
 import { SentimentMeter } from "@/components/sentiment-meter";
 import { SENTIMENT_COMPONENT_TR } from "@/lib/sentiment";
 import { eventLabel, daysLeftText } from "@/lib/calendar-text";
+import { fmtPct } from "@/lib/format";
 
 const BREADTH_HEALTHY = 60;
 const BREADTH_WEAK = 40;
@@ -19,11 +20,12 @@ function breadthHealth(pctAbove200: number): { emoji: string; text: string } {
 }
 
 export default async function MarketCompassPage() {
-  const [breadth, sentiment, rotationPayload, calendar] = await Promise.all([
+  const [breadth, sentiment, rotationPayload, calendar, yieldCurve] = await Promise.all([
     getBreadth(),
     getSentiment(),
     getRotation(false),
     getCalendar(45),
+    getYieldCurve(),
   ]);
 
   const rotation = rotationPayload.sectors;
@@ -36,7 +38,7 @@ export default async function MarketCompassPage() {
       <div>
         <h1 className="text-lg font-semibold text-text">Piyasa Pusulası</h1>
         <p className="mt-1 text-sm text-text-faint">
-          Piyasayı okumanın 4 katmanı, artı ekonomik takvim.
+          Piyasayı okumanın 5 katmanı, artı ekonomik takvim.
         </p>
       </div>
 
@@ -45,7 +47,7 @@ export default async function MarketCompassPage() {
           <p className="text-sm text-text-faint">Veri alınamadı.</p>
         ) : (
           <div className="flex flex-col gap-4">
-            <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
+            <div className="grid grid-cols-2 gap-3 lg:grid-cols-3">
               <StatTile label="SMA50 Üstü" value={`%${breadth.pct_above_50.toFixed(0)}`} />
               <StatTile label="SMA200 Üstü" value={`%${breadth.pct_above_200.toFixed(0)}`} />
               <StatTile
@@ -56,13 +58,66 @@ export default async function MarketCompassPage() {
                 label="20g Zirve / Dip"
                 value={`${breadth.new_high_20d} / ${breadth.new_low_20d}`}
               />
+              <StatTile
+                label="TRIN (Arms Index)"
+                value={breadth.trin !== null ? breadth.trin.toFixed(2) : "—"}
+              />
+              <StatTile
+                label="McClellan Osilatörü"
+                value={breadth.mcclellan !== null ? breadth.mcclellan.toFixed(0) : "—"}
+              />
             </div>
             <p className="text-sm text-text-dim">
               {breadthHealth(breadth.pct_above_200).emoji}{" "}
               {breadthHealth(breadth.pct_above_200).text}
+              {breadth.trin !== null &&
+                (breadth.trin < 1
+                  ? " Hacim alıcı tarafta yoğunlaşıyor (TRIN < 1)."
+                  : " Hacim satıcı tarafta yoğunlaşıyor (TRIN > 1).")}
             </p>
           </div>
         )}
+      </Panel>
+
+      <Panel
+        title="Getiri Eğrisi & Kredi"
+        subtitle="Resesyon ve kredi riski için erken uyarı sinyalleri"
+      >
+        <div className="flex flex-col gap-4">
+          <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
+            <StatTile
+              label="10 Yıllık Tahvil"
+              value={yieldCurve.yield_10y !== null ? `%${yieldCurve.yield_10y.toFixed(2)}` : "—"}
+            />
+            <StatTile
+              label="3 Aylık Bono"
+              value={yieldCurve.yield_3m !== null ? `%${yieldCurve.yield_3m.toFixed(2)}` : "—"}
+            />
+            <StatTile
+              label="Spread (10Y − 3A)"
+              value={
+                yieldCurve.spread_10y_3m !== null
+                  ? `${yieldCurve.spread_10y_3m >= 0 ? "+" : ""}${yieldCurve.spread_10y_3m.toFixed(2)}`
+                  : "—"
+              }
+            />
+            <StatTile
+              label="Kredi Spreadi (HYG/LQD, 1A)"
+              value={
+                yieldCurve.credit_spread_proxy_change !== null
+                  ? fmtPct(yieldCurve.credit_spread_proxy_change)
+                  : "—"
+              }
+            />
+          </div>
+          <p className="text-sm text-text-dim">
+            {yieldCurve.inverted
+              ? "🔴 Getiri eğrisi ters döndü — piyasa resesyon fiyatlıyor, tarihsel olarak güçlü bir öncü sinyal."
+              : "🟢 Getiri eğrisi normal — kısa vadeli faiz uzun vadelinin altında."}
+            {yieldCurve.credit_stress &&
+              " Kredi spreadleri de genişliyor — risk iştahı azalıyor, dikkatli ol."}
+          </p>
+        </div>
       </Panel>
 
       <Panel title="Duygu & Volatilite" subtitle="Korku mu, iştah mı?">
