@@ -43,7 +43,10 @@ def stub_portfolio(monkeypatch):
             "THYAO.IS": Quote("THYAO.IS", 210.0, 205.0, 2.0),
         },
     )
-    monkeypatch.setattr(api_data.data, "get_history", lambda sym, period=None: _history([100, 110]))
+    monkeypatch.setattr(
+        api_data.data, "get_histories",
+        lambda symbols, period=None: {sym: _history([100, 110]) for sym in symbols},
+    )
     monkeypatch.setattr(api_data.data, "get_usdtry", lambda: 30.0)
 
 
@@ -124,17 +127,17 @@ class TestRotationPayload:
 
 class TestTradeScanPayload:
     def test_empty_history_yields_no_signals(self, monkeypatch):
-        monkeypatch.setattr(api_data.data, "get_history", lambda sym, period=None: pd.DataFrame())
+        monkeypatch.setattr(api_data.data, "get_histories", lambda symbols, period=None: {})
         assert api_data.trade_scan_payload() == {"signals": []}
 
     def test_universe_covers_every_sector_leader_stock(self, monkeypatch):
         captured = {}
 
-        def fake_history(sym, period=None):
-            captured[sym] = True
-            return pd.DataFrame()
+        def fake_histories(symbols, period=None):
+            captured.update({sym: True for sym in symbols})
+            return {}
 
-        monkeypatch.setattr(api_data.data, "get_history", fake_history)
+        monkeypatch.setattr(api_data.data, "get_histories", fake_histories)
         api_data.trade_scan_payload()
         all_stocks = {s for stocks in config.SECTOR_LEADER_STOCKS.values() for s in stocks}
         assert set(captured) == all_stocks
@@ -142,18 +145,36 @@ class TestTradeScanPayload:
 
 class TestMoneyFlowPayload:
     def test_empty_history_yields_no_signals(self, monkeypatch):
-        monkeypatch.setattr(api_data.data, "get_history", lambda sym, period=None: pd.DataFrame())
+        monkeypatch.setattr(api_data.data, "get_histories", lambda symbols, period=None: {})
         assert api_data.money_flow_payload() == {"signals": []}
 
     def test_universe_covers_every_sector_leader_stock(self, monkeypatch):
         captured = {}
 
-        def fake_history(sym, period=None):
-            captured[sym] = True
-            return pd.DataFrame()
+        def fake_histories(symbols, period=None):
+            captured.update({sym: True for sym in symbols})
+            return {}
 
-        monkeypatch.setattr(api_data.data, "get_history", fake_history)
+        monkeypatch.setattr(api_data.data, "get_histories", fake_histories)
         api_data.money_flow_payload()
+        all_stocks = {s for stocks in config.SECTOR_LEADER_STOCKS.values() for s in stocks}
+        assert set(captured) == all_stocks
+
+
+class TestFundamentalScanPayload:
+    def test_no_data_yields_no_signals(self, monkeypatch):
+        monkeypatch.setattr(api_data.data, "get_fundamentals", lambda sym: None)
+        assert api_data.fundamental_scan_payload() == {"signals": []}
+
+    def test_universe_covers_every_sector_leader_stock(self, monkeypatch):
+        captured = {}
+
+        def fake_fundamentals(sym):
+            captured[sym] = True
+            return None
+
+        monkeypatch.setattr(api_data.data, "get_fundamentals", fake_fundamentals)
+        api_data.fundamental_scan_payload()
         all_stocks = {s for stocks in config.SECTOR_LEADER_STOCKS.values() for s in stocks}
         assert set(captured) == all_stocks
 
@@ -271,17 +292,16 @@ class TestNewsPayload:
 
 class TestComparePayload:
     def test_try_base_without_fx_history_returns_empty(self, stub_portfolio, monkeypatch):
-        monkeypatch.setattr(api_data.data, "get_history",
-                             lambda sym, period=None: pd.DataFrame())
+        monkeypatch.setattr(api_data.data, "get_histories", lambda symbols, period=None: {})
         out = api_data.compare_payload(base="TRY")
         assert out == []
 
     def test_usd_base_produces_portfolio_series(self, stub_portfolio, monkeypatch):
         prices = _history([100.0, 105.0, 110.0])
 
-        def fake_history(sym, period=None):
-            return prices
+        def fake_histories(symbols, period=None):
+            return {sym: prices for sym in symbols}
 
-        monkeypatch.setattr(api_data.data, "get_history", fake_history)
+        monkeypatch.setattr(api_data.data, "get_histories", fake_histories)
         out = api_data.compare_payload(base="USD")
         assert any(r.key == "portfolio" for r in out)

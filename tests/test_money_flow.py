@@ -62,7 +62,7 @@ class TestObvTrend:
 
 class TestBuildMoneyFlowScan:
     def test_skips_symbols_with_insufficient_history(self, monkeypatch):
-        monkeypatch.setattr(money_flow.data, "get_history", lambda sym, period=None: pd.DataFrame())
+        monkeypatch.setattr(money_flow.data, "get_histories", lambda symbols, period=None: {})
         assert build_money_flow_scan({"AAA": "Test"}) == []
 
     def test_builds_signal_with_ownership_data(self, monkeypatch):
@@ -77,7 +77,9 @@ class TestBuildMoneyFlowScan:
                 "Volume": np.full(N, 1000.0),
             }
         )
-        monkeypatch.setattr(money_flow.data, "get_history", lambda sym, period=None: df)
+        monkeypatch.setattr(
+            money_flow.data, "get_histories", lambda symbols, period=None: {"AAA": df}
+        )
         monkeypatch.setattr(
             money_flow.data, "get_ownership_flow",
             lambda sym: OwnershipFlow(institutional_pct=62.5, insider_net_pct_6m=1.2),
@@ -99,7 +101,9 @@ class TestBuildMoneyFlowScan:
 
     def test_missing_ownership_data_yields_none_fields(self, monkeypatch):
         df = _frame([100.0] * N)
-        monkeypatch.setattr(money_flow.data, "get_history", lambda sym, period=None: df)
+        monkeypatch.setattr(
+            money_flow.data, "get_histories", lambda symbols, period=None: {"AAA": df}
+        )
         monkeypatch.setattr(money_flow.data, "get_ownership_flow", lambda sym: None)
 
         out = build_money_flow_scan({"AAA": "Enerji"})

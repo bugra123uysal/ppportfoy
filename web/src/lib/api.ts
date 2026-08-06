@@ -157,6 +157,25 @@ export interface MoneyFlowPayload {
   signals: MoneyFlowSignal[];
 }
 
+export interface FundamentalSnapshot {
+  symbol: string;
+  sector: string;
+  pe: number | null;
+  peg: number | null;
+  ev_ebitda: number | null;
+  revenue_growth: number | null;
+  gross_margin: number | null;
+  operating_margin: number | null;
+  roe: number | null;
+  debt_to_equity: number | null;
+  fcf_yield: number | null;
+  verdict: "ucuz" | "makul" | "pahali" | "belirsiz";
+}
+
+export interface FundamentalScanPayload {
+  signals: FundamentalSnapshot[];
+}
+
 export interface MarketEvent {
   when: string;
   kind: "fomc" | "nfp" | "earnings";
@@ -291,6 +310,13 @@ export function getTradeScan(): Promise<TradeScanPayload> {
 
 export function getMoneyFlow(): Promise<MoneyFlowPayload> {
   return apiGet<MoneyFlowPayload>("/api/money-flow");
+}
+
+// No revalidateSeconds: same on-demand-scan pattern as trade scan/money flow
+// -- per-symbol Yahoo quote-summary reads are too slow to run on every page
+// load across the whole universe, so this is button-triggered.
+export function getFundamentals(): Promise<FundamentalScanPayload> {
+  return apiGet<FundamentalScanPayload>("/api/fundamentals");
 }
 
 export function getCalendar(days = 45): Promise<MarketEvent[]> {

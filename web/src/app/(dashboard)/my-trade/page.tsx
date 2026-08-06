@@ -1,6 +1,7 @@
 import { Panel } from "@/components/panel";
 import { MyTradeClient } from "./my-trade-client";
 import { MoneyFlowPanel } from "./money-flow-panel";
+import { FundamentalPanel } from "./fundamental-panel";
 
 export default function MyTradePage() {
   return (
@@ -8,8 +9,9 @@ export default function MyTradePage() {
       <div>
         <h1 className="text-lg font-semibold text-text">My Trade</h1>
         <p className="mt-1 text-sm text-text-faint">
-          İndikatör bazlı hisse tarama + stop-loss ve pozisyon boyutu disiplini. Mekanik kural
-          taraması ve eğitim amaçlı hesap aracıdır — yatırım tavsiyesi değildir.
+          İndikatör bazlı hisse tarama, sermaye akışı, fundamental değerleme + stop-loss ve
+          pozisyon boyutu disiplini. Mekanik kural taraması ve eğitim amaçlı hesap aracıdır —
+          yatırım tavsiyesi değildir.
         </p>
       </div>
 
@@ -68,6 +70,8 @@ export default function MyTradePage() {
       <MyTradeClient />
 
       <MoneyFlowPanel />
+
+      <FundamentalPanel />
     </>
   );
 }

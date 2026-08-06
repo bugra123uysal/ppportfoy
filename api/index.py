@@ -150,6 +150,11 @@ def money_flow() -> Response:
     return _json_response(api_data.money_flow_payload())
 
 
+@app.get("/api/fundamentals")
+def fundamentals() -> Response:
+    return _json_response(api_data.fundamental_scan_payload())
+
+
 @app.get("/api/options")
 def options_scan() -> Response:
     return _json_response(api_data.options_scan_payload())

@@ -198,6 +198,18 @@ CMF_THRESHOLD = 0.05            # |CMF| below this counts as "nötr", not accumu
 MFI_PERIOD = 14
 OBV_TREND_LOOKBACK = 10         # bars compared to call OBV "yükseliş"/"düşüş"/"yatay"
 
+# --- My Trade: fundamental tarama -------------------------------------------
+# Same scan universe again. Valuation/quality/growth metrics from Yahoo's
+# quote summary (yfinance's Ticker.info) -- the "fundamental analyst" answer
+# to the same question trade_scan.py answers technically: which of these
+# names is actually worth a closer look? Updates quarterly at most, so it
+# shares money_flow's ownership/analyst cache cadence.
+FUNDAMENTALS_CACHE_TTL = 21600
+FUNDAMENTALS_PEG_CHEAP = 1.0        # PEG below this reads as undervalued relative to growth
+FUNDAMENTALS_PEG_EXPENSIVE = 2.0    # PEG above this reads as expensive relative to growth
+FUNDAMENTALS_EV_EBITDA_CHEAP = 10.0     # capital-structure-neutral valuation, low = attractive
+FUNDAMENTALS_EV_EBITDA_EXPENSIVE = 15.0
+
 # --- Cash ------------------------------------------------------------------
 CASH_CURRENCIES = ("TRY", "USD")
 MAX_CASH = 1e12

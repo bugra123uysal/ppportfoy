@@ -333,12 +333,14 @@ class TestWeeklyTrendUp:
 
 class TestBuildTradeScan:
     def test_skips_symbols_with_insufficient_history(self, monkeypatch):
-        monkeypatch.setattr(trade_scan.data, "get_history", lambda sym, period=None: pd.DataFrame())
+        monkeypatch.setattr(trade_scan.data, "get_histories", lambda symbols, period=None: {})
         assert build_trade_scan({"AAA": "Test"}) == []
 
     def test_skips_symbols_matching_no_group(self, monkeypatch):
         flat = _frame(np.full(N, 100.0).tolist())
-        monkeypatch.setattr(trade_scan.data, "get_history", lambda sym, period=None: flat)
+        monkeypatch.setattr(
+            trade_scan.data, "get_histories", lambda symbols, period=None: {"AAA": flat}
+        )
         assert build_trade_scan({"AAA": "Test"}) == []
 
     def test_includes_and_labels_matching_symbols(self, monkeypatch):
@@ -347,7 +349,7 @@ class TestBuildTradeScan:
             "BBB": _frame(np.full(N, 100.0).tolist()),
         }
         monkeypatch.setattr(
-            trade_scan.data, "get_history", lambda sym, period=None: histories[sym]
+            trade_scan.data, "get_histories", lambda symbols, period=None: histories
         )
         out = build_trade_scan({"AAA": "Enerji", "BBB": "Finans"})
         assert [s.symbol for s in out] == ["AAA"]
@@ -378,7 +380,7 @@ class TestBuildTradeScan:
             "AAA": _frame(_GROUP1_SELL_CLOSE, _GROUP1_SELL_OPEN, _GROUP1_SELL_VOLUME),
         }
         monkeypatch.setattr(
-            trade_scan.data, "get_history", lambda sym, period=None: histories[sym]
+            trade_scan.data, "get_histories", lambda symbols, period=None: histories
         )
         out = build_trade_scan({"AAA": "Enerji"})
         assert [s.symbol for s in out] == ["AAA"]
@@ -402,7 +404,9 @@ class TestBuildTradeScan:
         # still surface as its own independent TradeSignal.
         df = _frame(_GROUP1_CLOSE, _GROUP1_OPEN, _GROUP1_VOLUME)
         monkeypatch.setattr(trade_scan, "_group2_sell_trend_deviation_stochrsi", lambda _df: True)
-        monkeypatch.setattr(trade_scan.data, "get_history", lambda sym, period=None: df)
+        monkeypatch.setattr(
+            trade_scan.data, "get_histories", lambda symbols, period=None: {"AAA": df}
+        )
 
         out = build_trade_scan({"AAA": "Enerji"})
         assert {s.direction for s in out} == {"long", "short"}

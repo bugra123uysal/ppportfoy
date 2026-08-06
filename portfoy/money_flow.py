@@ -63,9 +63,10 @@ def _obv_trend(obv: pd.Series) -> str:
 
 def build_money_flow_scan(universe: dict[str, str]) -> list[MoneyFlowSignal]:
     """Scan `universe` (ticker -> sector label) for money-flow signals."""
+    histories = data.get_histories(tuple(universe), period=config.MONEY_FLOW_HISTORY_PERIOD)
     results: list[MoneyFlowSignal] = []
     for symbol, sector in universe.items():
-        df = data.get_history(symbol, period=config.MONEY_FLOW_HISTORY_PERIOD)
+        df = histories.get(symbol, pd.DataFrame())
         if df.empty or len(df) < config.CMF_PERIOD:
             continue
 

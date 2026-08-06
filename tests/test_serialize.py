@@ -15,6 +15,7 @@ import pytest
 
 from portfoy.breadth import BreadthSnapshot
 from portfoy.calendar_events import MarketEvent
+from portfoy.data import AnalystView, Quote
 from portfoy.options import OptionActivity
 from portfoy.performance import SeriesResult
 from portfoy.risk import Alert, PositionMetrics
@@ -161,6 +162,42 @@ class TestDataclasses:
         c = CashHolding(currency="TRY", amount=25000.0)
         assert to_jsonable(p)["symbol"] == "AAPL"
         assert to_jsonable(c) == {"currency": "TRY", "amount": 25000.0}
+
+
+class TestNamedTuples:
+    """NamedTuple instances are also `tuple`, so without a dedicated branch
+    they fall into the generic tuple case and serialize as a positional
+    array instead of a keyed object -- every frontend `.field` access on the
+    result then silently reads `undefined`. Regression coverage for that.
+    """
+
+    def test_analyst_view_becomes_a_keyed_object_not_an_array(self):
+        v = AnalystView(target_mean=302.8, target_high=500.0, target_low=180.0,
+                         consensus="al", num_analysts=61)
+        out = to_jsonable(v)
+        assert out == {
+            "target_mean": 302.8, "target_high": 500.0, "target_low": 180.0,
+            "consensus": "al", "num_analysts": 61,
+        }
+        assert not isinstance(out, list)
+
+    def test_quote_becomes_a_keyed_object(self):
+        q = Quote(symbol="AAPL", price=110.0, prev_close=108.0, change_pct=1.85)
+        assert to_jsonable(q) == {
+            "symbol": "AAPL", "price": 110.0, "prev_close": 108.0, "change_pct": 1.85,
+        }
+
+    def test_namedtuple_nan_field_becomes_none(self):
+        v = AnalystView(target_mean=float("nan"), target_high=None, target_low=None,
+                         consensus=None, num_analysts=None)
+        assert to_jsonable(v)["target_mean"] is None
+
+    def test_dict_of_namedtuples_serializes_each_value_as_an_object(self):
+        views = {"AAPL": AnalystView(target_mean=200.0, target_high=None,
+                                      target_low=None, consensus="tut", num_analysts=10)}
+        out = to_jsonable(views)
+        assert out["AAPL"]["target_mean"] == 200.0
+        assert out["AAPL"]["consensus"] == "tut"
 
 
 class TestDumps:

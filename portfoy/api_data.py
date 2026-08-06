@@ -19,6 +19,7 @@ from . import config, data, performance, risk, storage
 from .breadth import BreadthSnapshot, build_snapshot
 from .calendar_events import MarketEvent, upcoming_events
 from .data import AnalystView
+from .fundamentals import build_fundamental_scan
 from .indicators import last_value, sma
 from .money_flow import build_money_flow_scan
 from .options import OptionActivity, rank_by_volume
@@ -36,7 +37,7 @@ def _load_metrics() -> tuple[list[PositionMetrics], list[storage.CashHolding], f
     cash = storage.load_cash()
     symbols = tuple(p.symbol for p in positions)
     quotes = data.get_quotes(symbols) if symbols else {}
-    histories = {sym: data.get_history(sym) for sym in symbols}
+    histories = data.get_histories(symbols) if symbols else {}
     usdtry = data.get_usdtry()
     cash_usd = risk.cash_totals(cash, usdtry)["usd"]
     metrics = risk.compute_metrics(positions, quotes, histories, usdtry, cash_usd)
@@ -100,6 +101,10 @@ def trade_scan_payload() -> dict:
 
 def money_flow_payload() -> dict:
     return {"signals": build_money_flow_scan(_sector_leader_universe())}
+
+
+def fundamental_scan_payload() -> dict:
+    return {"signals": build_fundamental_scan(_sector_leader_universe())}
 
 
 def option_activity_payload(symbol: str) -> OptionActivity | None:
@@ -189,18 +194,17 @@ def compare_payload(
     period: str = config.DEFAULT_COMPARE_PERIOD, base: str = "USD"
 ) -> list[SeriesResult]:
     metrics, cash, usdtry = _load_metrics()
-    prices = {}
-    for m in metrics:
-        hist = data.get_history(m.symbol, config.COMPARE_HISTORY_PERIOD)
-        if not hist.empty:
-            prices[m.symbol] = hist["Close"]
-    benchmarks = {}
-    for sym in config.BENCHMARKS:
-        hist = data.get_history(sym, config.COMPARE_HISTORY_PERIOD)
-        if not hist.empty:
-            benchmarks[sym] = hist["Close"]
-    fx_hist = data.get_history(config.FX_USDTRY, config.COMPARE_HISTORY_PERIOD)
-    fx_series = fx_hist["Close"] if not fx_hist.empty else pd.Series(dtype=float)
+    all_symbols = tuple(
+        dict.fromkeys([*(m.symbol for m in metrics), *config.BENCHMARKS, config.FX_USDTRY])
+    )
+    histories = data.get_histories(all_symbols, config.COMPARE_HISTORY_PERIOD)
+    prices = {m.symbol: histories[m.symbol]["Close"] for m in metrics if m.symbol in histories}
+    benchmarks = {sym: histories[sym]["Close"] for sym in config.BENCHMARKS if sym in histories}
+    fx_series = (
+        histories[config.FX_USDTRY]["Close"]
+        if config.FX_USDTRY in histories
+        else pd.Series(dtype=float)
+    )
     if base == "TRY" and fx_series.empty:
         return []
 

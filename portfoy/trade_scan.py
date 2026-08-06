@@ -281,9 +281,10 @@ def build_trade_scan(universe: dict[str, str]) -> list[TradeSignal]:
     becomes its own `TradeSignal` so the suggested stop is never ambiguous
     about which side of price it sits on.
     """
+    histories = data.get_histories(tuple(universe), period=config.TRADE_SCAN_HISTORY_PERIOD)
     results: list[TradeSignal] = []
     for symbol, sector in universe.items():
-        df = data.get_history(symbol, period=config.TRADE_SCAN_HISTORY_PERIOD)
+        df = histories.get(symbol, pd.DataFrame())
         if df.empty or len(df) < config.BB_PERIOD + config.SMI_SIGNAL * 2:
             continue
 

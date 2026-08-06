@@ -81,6 +81,53 @@ def get_history(symbol: str, period: str = config.DEFAULT_HISTORY_PERIOD) -> pd.
     return df.dropna(subset=["Close"])
 
 
+def _encode_price_frames(frames: dict[str, pd.DataFrame]) -> str:
+    return json.dumps({sym: _encode_price_frame(df) for sym, df in frames.items()})
+
+
+def _decode_price_frames(raw: str) -> dict[str, pd.DataFrame]:
+    return {sym: _decode_price_frame(blob) for sym, blob in json.loads(raw).items()}
+
+
+@cached(ttl=config.HISTORY_CACHE_TTL, encode=_encode_price_frames, decode=_decode_price_frames)
+def get_histories(
+    symbols: tuple[str, ...], period: str = config.DEFAULT_HISTORY_PERIOD
+) -> dict[str, pd.DataFrame]:
+    """Daily OHLCV history for many symbols in one batched request.
+
+    Same shape as N calls to `get_history`, but one network round trip
+    (yfinance's own thread pool) instead of N sequential ones -- the
+    difference between a page load that waits on one slow request and one
+    that waits on `len(symbols)` of them. Symbols that fail or come back
+    empty are simply absent from the result, same as `get_history` returning
+    an empty frame for a single symbol.
+    """
+    if not symbols:
+        return {}
+    try:
+        df = yf.download(
+            list(symbols), period=period, interval="1d",
+            auto_adjust=True, progress=False, group_by="ticker", threads=True,
+        )
+    except Exception:
+        return {}
+    if df is None or df.empty:
+        return {}
+    needed = {"Open", "High", "Low", "Close"}
+    out: dict[str, pd.DataFrame] = {}
+    for sym in symbols:
+        try:
+            sub = df[sym] if isinstance(df.columns, pd.MultiIndex) else df
+            if not needed.issubset(sub.columns):
+                continue
+            sub = sub.dropna(subset=["Close"])
+            if not sub.empty:
+                out[sym] = sub
+        except (KeyError, TypeError):
+            continue
+    return out
+
+
 @cached(ttl=config.QUOTE_CACHE_TTL, encode=_encode_quotes, decode=_decode_quotes)
 def get_quotes(symbols: tuple[str, ...]) -> dict[str, Quote]:
     """Batch quotes derived from 5 days of closes (robust across yf versions)."""
@@ -373,6 +420,79 @@ def _to_optional_float(value: object) -> float | None:
         return None if value is None else float(value)  # type: ignore[arg-type]
     except (TypeError, ValueError):
         return None
+
+
+class FundamentalMetrics(NamedTuple):
+    pe: float | None
+    peg: float | None                  # derived: trailing P/E / (earnings growth * 100)
+    ev_ebitda: float | None
+    revenue_growth: float | None       # % YoY
+    gross_margin: float | None         # %
+    operating_margin: float | None     # %
+    roe: float | None                  # %
+    debt_to_equity: float | None
+    fcf_yield: float | None            # % of market cap
+
+
+def _encode_fundamentals(m: FundamentalMetrics | None) -> str:
+    return "" if m is None else json.dumps(list(m))
+
+
+def _decode_fundamentals(raw: str) -> FundamentalMetrics | None:
+    return None if not raw else FundamentalMetrics(*json.loads(raw))
+
+
+@cached(ttl=config.FUNDAMENTALS_CACHE_TTL, encode=_encode_fundamentals, decode=_decode_fundamentals)
+def get_fundamentals(symbol: str) -> FundamentalMetrics | None:
+    """Valuation/quality/growth metrics from Yahoo's quote summary (free,
+    the same data `Ticker.info` already wraps -- no separate paid endpoint).
+
+    PEG isn't read directly: Yahoo dropped a reliable `pegRatio` field, so
+    it's derived from trailing P/E and forward earnings growth instead, which
+    is the same arithmetic PEG has always been (P/E ÷ expected growth rate).
+    """
+    try:
+        info = yf.Ticker(symbol).info
+    except Exception:
+        return None
+    if not info:
+        return None
+
+    pe = _to_optional_float(info.get("trailingPE"))
+    ev_ebitda = _to_optional_float(info.get("enterpriseToEbitda"))
+    revenue_growth = _to_optional_float(info.get("revenueGrowth"))
+    earnings_growth = _to_optional_float(info.get("earningsGrowth"))
+    gross_margin = _to_optional_float(info.get("grossMargins"))
+    operating_margin = _to_optional_float(info.get("operatingMargins"))
+    roe = _to_optional_float(info.get("returnOnEquity"))
+    debt_to_equity = _to_optional_float(info.get("debtToEquity"))
+    fcf = _to_optional_float(info.get("freeCashflow"))
+    market_cap = _to_optional_float(info.get("marketCap"))
+
+    if pe is None and ev_ebitda is None and revenue_growth is None:
+        return None
+
+    peg = (
+        pe / (earnings_growth * 100.0)
+        if pe is not None and earnings_growth is not None and earnings_growth > 0
+        else None
+    )
+    fcf_yield = (
+        (fcf / market_cap) * 100.0 if fcf is not None and market_cap is not None and market_cap > 0
+        else None
+    )
+
+    return FundamentalMetrics(
+        pe=pe,
+        peg=peg,
+        ev_ebitda=ev_ebitda,
+        revenue_growth=None if revenue_growth is None else revenue_growth * 100.0,
+        gross_margin=None if gross_margin is None else gross_margin * 100.0,
+        operating_margin=None if operating_margin is None else operating_margin * 100.0,
+        roe=None if roe is None else roe * 100.0,
+        debt_to_equity=debt_to_equity,
+        fcf_yield=fcf_yield,
+    )
 
 
 def symbol_exists(symbol: str) -> bool:

@@ -57,6 +57,12 @@ def to_jsonable(value: Any) -> Any:
         return {str(k): to_jsonable(v) for k, v in value.items()}
     if isinstance(value, np.ndarray):
         return [to_jsonable(v) for v in value.tolist()]
+    # NamedTuple instances are also `tuple`, so this must come before the
+    # generic tuple branch below -- otherwise a NamedTuple (e.g. AnalystView,
+    # Quote) serializes as a positional array instead of a keyed object, and
+    # every frontend field access on it silently reads `undefined`.
+    if isinstance(value, tuple) and hasattr(value, "_asdict"):
+        return to_jsonable(value._asdict())
     if isinstance(value, (list, tuple, set)):
         return [to_jsonable(v) for v in value]
     raise TypeError(f"portfoy.serialize cannot encode {type(value)!r}: {value!r}")

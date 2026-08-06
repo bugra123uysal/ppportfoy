@@ -96,6 +96,11 @@ class TestRouteWiring:
         monkeypatch.setattr(api_index.api_data, "options_scan_payload", lambda: [])
         assert client.get("/api/options", headers=AUTH).status_code == 200
 
+    def test_fundamentals(self, client, monkeypatch):
+        monkeypatch.setattr(api_index.api_data, "fundamental_scan_payload", lambda: {"signals": []})
+        resp = client.get("/api/fundamentals", headers=AUTH)
+        assert resp.get_json() == {"signals": []}
+
     def test_option_activity_passes_normalized_symbol(self, client, monkeypatch):
         captured = {}
         monkeypatch.setattr(api_index.api_data, "option_activity_payload",
@@ -132,6 +137,31 @@ class TestRouteWiring:
         monkeypatch.setattr(api_index.api_data, "analyst_payload", lambda: payload)
         resp = client.get("/api/analyst", headers=AUTH)
         assert resp.get_json() == payload
+
+    def test_analyst_serializes_as_object_not_array(self, client, monkeypatch):
+        """Exercises the real serialization path (unlike test_analyst above,
+        which mocks analyst_payload itself) -- AnalystView is a NamedTuple,
+        which without portfoy.serialize's dedicated branch silently
+        serializes as a positional array instead of a keyed object.
+        """
+        from portfoy.data import AnalystView
+        from portfoy.storage import Position
+
+        monkeypatch.setattr(
+            api_index.api_data.storage, "load_portfolio",
+            lambda: [Position(symbol="AAPL", quantity=10.0, avg_cost=100.0,
+                               currency="USD", added="2026-01-01", notes="")],
+        )
+        monkeypatch.setattr(
+            api_index.api_data.data, "get_analyst_view",
+            lambda sym: AnalystView(target_mean=200.0, target_high=None,
+                                     target_low=None, consensus="al", num_analysts=5),
+        )
+        resp = client.get("/api/analyst", headers=AUTH)
+        body = resp.get_json()
+        assert isinstance(body["AAPL"], dict)
+        assert body["AAPL"]["target_mean"] == 200.0
+        assert body["AAPL"]["consensus"] == "al"
 
     def test_calendar_default_days(self, client, monkeypatch):
         captured = {}
