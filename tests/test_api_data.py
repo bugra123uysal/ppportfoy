@@ -48,6 +48,9 @@ def stub_portfolio(monkeypatch):
         lambda symbols, period=None: {sym: _history([100, 110]) for sym in symbols},
     )
     monkeypatch.setattr(api_data.data, "get_usdtry", lambda: 30.0)
+    # position_health.evaluate_portfolio (invoked from portfolio_summary_payload)
+    # calls this per held symbol -- stub it so no test here hits the network.
+    monkeypatch.setattr(api_data.data, "get_fundamentals", lambda sym: None)
 
 
 class TestPositionsPayload:
@@ -81,6 +84,12 @@ class TestPortfolioSummaryPayload:
         monkeypatch.setattr(api_data.data, "get_next_earnings", lambda sym: None)
         out = api_data.portfolio_summary_payload()
         assert isinstance(out["alerts"], list)
+
+    def test_includes_position_health_for_every_holding(self, stub_portfolio, monkeypatch):
+        monkeypatch.setattr(api_data.data, "get_macro_snapshot", lambda: [])
+        monkeypatch.setattr(api_data.data, "get_next_earnings", lambda sym: None)
+        out = api_data.portfolio_summary_payload()
+        assert {h.symbol for h in out["position_health"]} == {"AAPL", "THYAO.IS"}
 
 
 class TestPortfolioHistoryPayload:

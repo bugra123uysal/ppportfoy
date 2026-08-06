@@ -24,6 +24,7 @@ from .indicators import last_value, sma
 from .money_flow import build_money_flow_scan
 from .options import OptionActivity, rank_by_volume
 from .performance import SeriesResult
+from .position_health import evaluate_portfolio
 from .risk import PositionMetrics
 from .rotation import build_rotation, build_sector_leaders
 from .sentiment import SentimentScore, build_score
@@ -31,8 +32,15 @@ from .trade_scan import build_trade_scan
 from .yield_curve import YieldCurveSnapshot, build_yield_curve_snapshot, credit_spread_proxy_change
 
 
-def _load_metrics() -> tuple[list[PositionMetrics], list[storage.CashHolding], float | None]:
-    """Positions + cash + live metrics -- the common core of most endpoints."""
+def _load_metrics() -> tuple[
+    list[PositionMetrics], list[storage.CashHolding], float | None, dict[str, pd.DataFrame]
+]:
+    """Positions + cash + live metrics -- the common core of most endpoints.
+
+    Also returns the fetched `histories` so callers that need per-symbol
+    price history for something else (see position_health_payload) can reuse
+    it instead of a second `get_histories` round trip.
+    """
     positions = storage.load_portfolio()
     cash = storage.load_cash()
     symbols = tuple(p.symbol for p in positions)
@@ -41,16 +49,16 @@ def _load_metrics() -> tuple[list[PositionMetrics], list[storage.CashHolding], f
     usdtry = data.get_usdtry()
     cash_usd = risk.cash_totals(cash, usdtry)["usd"]
     metrics = risk.compute_metrics(positions, quotes, histories, usdtry, cash_usd)
-    return metrics, cash, usdtry
+    return metrics, cash, usdtry, histories
 
 
 def positions_payload() -> dict:
-    metrics, cash, usdtry = _load_metrics()
+    metrics, cash, usdtry, _histories = _load_metrics()
     return {"metrics": metrics, "cash": cash, "usdtry": usdtry}
 
 
 def portfolio_summary_payload() -> dict:
-    metrics, cash, usdtry = _load_metrics()
+    metrics, cash, usdtry, histories = _load_metrics()
     macro = data.get_macro_snapshot()
     vix = next((row["price"] for row in macro if row["symbol"] == "^VIX"), None)
     earnings = {
@@ -59,7 +67,8 @@ def portfolio_summary_payload() -> dict:
     }
     totals = risk.portfolio_totals(metrics, usdtry, cash)
     alerts = risk.build_alerts(metrics, earnings, vix)
-    return {"totals": totals, "alerts": alerts}
+    position_health = evaluate_portfolio([m.symbol for m in metrics], histories)
+    return {"totals": totals, "alerts": alerts, "position_health": position_health}
 
 
 def portfolio_history_payload() -> list[dict]:
@@ -193,7 +202,7 @@ def news_payload(symbol: str, lang: str = "tr") -> list[dict]:
 def compare_payload(
     period: str = config.DEFAULT_COMPARE_PERIOD, base: str = "USD"
 ) -> list[SeriesResult]:
-    metrics, cash, usdtry = _load_metrics()
+    metrics, cash, usdtry, _histories = _load_metrics()
     all_symbols = tuple(
         dict.fromkeys([*(m.symbol for m in metrics), *config.BENCHMARKS, config.FX_USDTRY])
     )

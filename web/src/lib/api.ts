@@ -51,9 +51,17 @@ export interface Alert {
   params: Record<string, string>;
 }
 
+export interface PositionHealth {
+  symbol: string;
+  score: number;
+  reasons: string[];
+  verdict: "zayifliyor" | "notr" | "guclu";
+}
+
 export interface PortfolioSummary {
   totals: PortfolioTotals;
   alerts: Alert[];
+  position_health: PositionHealth[];
 }
 
 export interface MacroRow {

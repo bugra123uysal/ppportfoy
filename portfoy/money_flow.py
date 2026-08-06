@@ -61,37 +61,44 @@ def _obv_trend(obv: pd.Series) -> str:
     return "yatay"
 
 
+def scan_symbol(symbol: str, sector: str, df: pd.DataFrame) -> MoneyFlowSignal | None:
+    """The part of `build_money_flow_scan` that doesn't fetch history -- pure
+    per-symbol scoring against an already-fetched frame (the ownership read
+    is still its own cached network call; it isn't part of `df`). Split out
+    so callers who already have `df` (position_health.py, reusing
+    `_load_metrics`'s history) don't need a second round trip.
+    """
+    if df.empty or len(df) < config.CMF_PERIOD:
+        return None
+
+    cmf = chaikin_money_flow(df["High"], df["Low"], df["Close"], df["Volume"], config.CMF_PERIOD)
+    mfi = money_flow_index(df["High"], df["Low"], df["Close"], df["Volume"], config.MFI_PERIOD)
+    obv = on_balance_volume(df["Close"], df["Volume"])
+
+    cmf_last = None if cmf.empty or pd.isna(cmf.iloc[-1]) else float(cmf.iloc[-1])
+    mfi_last = None if mfi.empty or pd.isna(mfi.iloc[-1]) else float(mfi.iloc[-1])
+    ownership = data.get_ownership_flow(symbol)
+
+    return MoneyFlowSignal(
+        symbol=symbol,
+        sector=sector,
+        price=float(df["Close"].iloc[-1]),
+        change_1d=pct_change_last(df["Close"]),
+        cmf=cmf_last,
+        cmf_signal=_cmf_signal(cmf_last),
+        mfi=mfi_last,
+        obv_trend=_obv_trend(obv),
+        institutional_pct=ownership.institutional_pct if ownership else None,
+        insider_net_pct_6m=ownership.insider_net_pct_6m if ownership else None,
+    )
+
+
 def build_money_flow_scan(universe: dict[str, str]) -> list[MoneyFlowSignal]:
     """Scan `universe` (ticker -> sector label) for money-flow signals."""
     histories = data.get_histories(tuple(universe), period=config.MONEY_FLOW_HISTORY_PERIOD)
     results: list[MoneyFlowSignal] = []
     for symbol, sector in universe.items():
-        df = histories.get(symbol, pd.DataFrame())
-        if df.empty or len(df) < config.CMF_PERIOD:
-            continue
-
-        cmf = chaikin_money_flow(
-            df["High"], df["Low"], df["Close"], df["Volume"], config.CMF_PERIOD
-        )
-        mfi = money_flow_index(df["High"], df["Low"], df["Close"], df["Volume"], config.MFI_PERIOD)
-        obv = on_balance_volume(df["Close"], df["Volume"])
-
-        cmf_last = None if cmf.empty or pd.isna(cmf.iloc[-1]) else float(cmf.iloc[-1])
-        mfi_last = None if mfi.empty or pd.isna(mfi.iloc[-1]) else float(mfi.iloc[-1])
-        ownership = data.get_ownership_flow(symbol)
-
-        results.append(
-            MoneyFlowSignal(
-                symbol=symbol,
-                sector=sector,
-                price=float(df["Close"].iloc[-1]),
-                change_1d=pct_change_last(df["Close"]),
-                cmf=cmf_last,
-                cmf_signal=_cmf_signal(cmf_last),
-                mfi=mfi_last,
-                obv_trend=_obv_trend(obv),
-                institutional_pct=ownership.institutional_pct if ownership else None,
-                insider_net_pct_6m=ownership.insider_net_pct_6m if ownership else None,
-            )
-        )
+        signal = scan_symbol(symbol, sector, histories.get(symbol, pd.DataFrame()))
+        if signal is not None:
+            results.append(signal)
     return results

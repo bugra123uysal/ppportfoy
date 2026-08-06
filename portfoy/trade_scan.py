@@ -273,87 +273,97 @@ def _weekly_trend_up(df: pd.DataFrame) -> bool | None:
     return bool(weekly_ema.iloc[-1] > weekly_ema.iloc[-6])
 
 
-def build_trade_scan(universe: dict[str, str]) -> list[TradeSignal]:
-    """Scan `universe` (ticker -> sector label) and group matches by setup.
+def scan_symbol(symbol: str, sector: str, df: pd.DataFrame) -> list[TradeSignal]:
+    """The part of `build_trade_scan` that doesn't fetch -- pure per-symbol
+    scoring against an already-fetched history. Split out so callers who
+    already have `df` (e.g. position_health.py, scoring the user's own
+    holdings from the same history `_load_metrics` already fetched) don't
+    need a second network round trip just to reuse this logic.
 
     A symbol can independently qualify long, short, or (the four setups
     check different indicators) both at once; each direction that matches
     becomes its own `TradeSignal` so the suggested stop is never ambiguous
     about which side of price it sits on.
     """
+    if df.empty or len(df) < config.BB_PERIOD + config.SMI_SIGNAL * 2:
+        return []
+
+    long_groups: list[int] = []
+    if _group1_buy_momentum_volume_bands(df):
+        long_groups.append(1)
+    if _group2_buy_trend_deviation_stochrsi(df):
+        long_groups.append(2)
+    if _group3_buy_flip_and_trend(df):
+        long_groups.append(3)
+    if _group4_buy_stochrsi_ema_median(df):
+        long_groups.append(4)
+
+    short_groups: list[int] = []
+    if _group1_sell_momentum_volume_bands(df):
+        short_groups.append(1)
+    if _group2_sell_trend_deviation_stochrsi(df):
+        short_groups.append(2)
+    if _group3_sell_flip_and_trend(df):
+        short_groups.append(3)
+    if _group4_sell_stochrsi_ema(df):
+        short_groups.append(4)
+
+    if not long_groups and not short_groups:
+        return []
+
+    price = float(df["Close"].iloc[-1])
+    atr_last = _atr_last(df)
+    change_1d = pct_change_last(df["Close"])
+    high52 = pct_from_52w_high(df["Close"], config.WEEK_52_TRADING_DAYS)
+    low52 = pct_from_52w_low(df["Close"], config.WEEK_52_TRADING_DAYS)
+    weekly_up = _weekly_trend_up(df)
+
+    results: list[TradeSignal] = []
+    if long_groups:
+        suggested_stop = (
+            round(price - atr_last * config.STOP_ATR_MULT, 2) if atr_last is not None else None
+        )
+        results.append(
+            TradeSignal(
+                symbol=symbol,
+                sector=sector,
+                price=price,
+                change_1d=change_1d,
+                direction="long",
+                groups=long_groups,
+                atr_14=atr_last,
+                suggested_stop=suggested_stop,
+                pct_from_52w_high=high52,
+                pct_from_52w_low=low52,
+                weekly_trend_aligned=weekly_up,
+            )
+        )
+    if short_groups:
+        suggested_stop = (
+            round(price + atr_last * config.STOP_ATR_MULT, 2) if atr_last is not None else None
+        )
+        results.append(
+            TradeSignal(
+                symbol=symbol,
+                sector=sector,
+                price=price,
+                change_1d=change_1d,
+                direction="short",
+                groups=short_groups,
+                atr_14=atr_last,
+                suggested_stop=suggested_stop,
+                pct_from_52w_high=high52,
+                pct_from_52w_low=low52,
+                weekly_trend_aligned=(None if weekly_up is None else not weekly_up),
+            )
+        )
+    return results
+
+
+def build_trade_scan(universe: dict[str, str]) -> list[TradeSignal]:
+    """Scan `universe` (ticker -> sector label) and group matches by setup."""
     histories = data.get_histories(tuple(universe), period=config.TRADE_SCAN_HISTORY_PERIOD)
     results: list[TradeSignal] = []
     for symbol, sector in universe.items():
-        df = histories.get(symbol, pd.DataFrame())
-        if df.empty or len(df) < config.BB_PERIOD + config.SMI_SIGNAL * 2:
-            continue
-
-        long_groups: list[int] = []
-        if _group1_buy_momentum_volume_bands(df):
-            long_groups.append(1)
-        if _group2_buy_trend_deviation_stochrsi(df):
-            long_groups.append(2)
-        if _group3_buy_flip_and_trend(df):
-            long_groups.append(3)
-        if _group4_buy_stochrsi_ema_median(df):
-            long_groups.append(4)
-
-        short_groups: list[int] = []
-        if _group1_sell_momentum_volume_bands(df):
-            short_groups.append(1)
-        if _group2_sell_trend_deviation_stochrsi(df):
-            short_groups.append(2)
-        if _group3_sell_flip_and_trend(df):
-            short_groups.append(3)
-        if _group4_sell_stochrsi_ema(df):
-            short_groups.append(4)
-
-        if not long_groups and not short_groups:
-            continue
-
-        price = float(df["Close"].iloc[-1])
-        atr_last = _atr_last(df)
-        change_1d = pct_change_last(df["Close"])
-        high52 = pct_from_52w_high(df["Close"], config.WEEK_52_TRADING_DAYS)
-        low52 = pct_from_52w_low(df["Close"], config.WEEK_52_TRADING_DAYS)
-        weekly_up = _weekly_trend_up(df)
-
-        if long_groups:
-            suggested_stop = (
-                round(price - atr_last * config.STOP_ATR_MULT, 2) if atr_last is not None else None
-            )
-            results.append(
-                TradeSignal(
-                    symbol=symbol,
-                    sector=sector,
-                    price=price,
-                    change_1d=change_1d,
-                    direction="long",
-                    groups=long_groups,
-                    atr_14=atr_last,
-                    suggested_stop=suggested_stop,
-                    pct_from_52w_high=high52,
-                    pct_from_52w_low=low52,
-                    weekly_trend_aligned=weekly_up,
-                )
-            )
-        if short_groups:
-            suggested_stop = (
-                round(price + atr_last * config.STOP_ATR_MULT, 2) if atr_last is not None else None
-            )
-            results.append(
-                TradeSignal(
-                    symbol=symbol,
-                    sector=sector,
-                    price=price,
-                    change_1d=change_1d,
-                    direction="short",
-                    groups=short_groups,
-                    atr_14=atr_last,
-                    suggested_stop=suggested_stop,
-                    pct_from_52w_high=high52,
-                    pct_from_52w_low=low52,
-                    weekly_trend_aligned=(None if weekly_up is None else not weekly_up),
-                )
-            )
+        results.extend(scan_symbol(symbol, sector, histories.get(symbol, pd.DataFrame())))
     return results

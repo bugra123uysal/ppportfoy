@@ -210,6 +210,13 @@ FUNDAMENTALS_PEG_EXPENSIVE = 2.0    # PEG above this reads as expensive relative
 FUNDAMENTALS_EV_EBITDA_CHEAP = 10.0     # capital-structure-neutral valuation, low = attractive
 FUNDAMENTALS_EV_EBITDA_EXPENSIVE = 15.0
 
+# --- Risk & Uyarılar: pozisyon sağlığı --------------------------------------
+# Applies the same technical/money-flow/fundamental reads My Trade's scanners
+# use to the user's own holdings instead of the fixed sector-leader universe
+# -- see portfoy/position_health.py. Thresholds on the combined score below.
+POSITION_HEALTH_WEAKENING = -2
+POSITION_HEALTH_STRONG = 2
+
 # --- Cash ------------------------------------------------------------------
 CASH_CURRENCIES = ("TRY", "USD")
 MAX_CASH = 1e12

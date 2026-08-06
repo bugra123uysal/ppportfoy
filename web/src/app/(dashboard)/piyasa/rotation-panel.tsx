@@ -30,6 +30,14 @@ export async function RotationPanel({ includeMine }: { includeMine: boolean }) {
   // de göster" overlays individual stocks on the map.
   const sectorSymbols = new Set(Object.keys(leaders));
   const sectorPoints = points.filter((p) => sectorSymbols.has(p.symbol));
+  // The RRG scatter specifically stays sector-ETFs-only (plus the user's own
+  // holdings when they've asked to see them) -- `points` also carries every
+  // individual sector-leader stock (77+ of them, fetched to build the leader
+  // accordion + performance table below), which would turn the quadrant into
+  // an unreadable dot cloud if plotted directly.
+  const chartPoints = points.filter(
+    (p) => sectorSymbols.has(p.symbol) || p.label_tr === "Portföyüm",
+  );
   // Kadran değişimleri de sadece sektör/ETF bazında gösterilir -- bireysel
   // hisselerin kadran geçişleri listeyi anlamsız derecede kalabalıklaştırır.
   const movers = sectorPoints.filter((p) => p.quadrant !== p.prev_quadrant);
@@ -93,7 +101,7 @@ export async function RotationPanel({ includeMine }: { includeMine: boolean }) {
               </p>
             )}
 
-            <RrgChart points={points} />
+            <RrgChart points={chartPoints} />
           </div>
         )}
       </Panel>

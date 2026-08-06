@@ -2,9 +2,10 @@ import { getPortfolioSummary } from "@/lib/api";
 import { Panel } from "@/components/panel";
 import { AlertList } from "@/components/alert-list";
 import { StatTile } from "@/components/stat-tile";
+import { PositionHealthPanel } from "./position-health-panel";
 
 export default async function RiskPage() {
-  const { alerts } = await getPortfolioSummary();
+  const { alerts, position_health } = await getPortfolioSummary();
   const crit = alerts.filter((a) => a.severity === "crit").length;
   const warn = alerts.filter((a) => a.severity === "warn").length;
   const info = alerts.filter((a) => a.severity === "info").length;
@@ -27,6 +28,8 @@ export default async function RiskPage() {
       <Panel title="Aktif Uyarılar">
         <AlertList alerts={alerts} />
       </Panel>
+
+      <PositionHealthPanel health={position_health} />
     </>
   );
 }
