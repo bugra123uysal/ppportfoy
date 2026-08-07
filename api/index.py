@@ -28,6 +28,7 @@ from flask import Flask, Response, request  # noqa: E402
 from werkzeug.exceptions import HTTPException  # noqa: E402
 
 from portfoy import api_data, config, storage  # noqa: E402
+from portfoy import movers as movers_module  # noqa: E402
 from portfoy.security import ValidationError, normalize_symbol  # noqa: E402
 from portfoy.serialize import dumps  # noqa: E402
 
@@ -195,6 +196,22 @@ def calendar() -> Response:
     days = request.args.get("days", type=int) or config.CALENDAR_LOOKAHEAD_DAYS
     days = max(1, min(days, 365))
     return _json_response(api_data.calendar_payload(days))
+
+
+@app.get("/api/movers")
+def movers() -> Response:
+    return _json_response(api_data.movers_payload())
+
+
+@app.post("/api/movers/scan")
+def movers_scan() -> Response:
+    """Runs the (slow) live scan and persists it, unless the last snapshot is
+    still fresh (scan_if_due's own min-interval backstop) -- meant to be
+    triggered by an external scheduler (see
+    web/src/app/api/cron/movers-scan/route.ts), not by the page. Behind the
+    same PORTFOY_API_KEY gate as every other route here; the internal
+    service binding is the only way to reach it."""
+    return _json_response(movers_module.scan_if_due())
 
 
 @app.get("/api/news/<symbol>")

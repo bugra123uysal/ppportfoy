@@ -207,6 +207,25 @@ export interface OptionActivity {
   }>;
 }
 
+export interface Mover {
+  symbol: string;
+  name: string;
+  price: number;
+  change_pct: number;
+  volume: number | null;
+  avg_volume_3m: number | null;
+  relative_volume: number | null;
+  sector: string | null;
+  signals: TradeSignal[];
+  news: NewsItem[];
+}
+
+export interface MoversScan {
+  generated_at: string;
+  gainers: Mover[];
+  volume_spikes: Mover[];
+}
+
 export interface NewsItem {
   symbol: string;
   title: string;
@@ -337,6 +356,13 @@ export function getOptionsScan(): Promise<OptionActivity[]> {
 
 export function getNews(symbol: string, lang = "tr"): Promise<NewsItem[]> {
   return apiGet<NewsItem[]>(`/api/news/${encodeURIComponent(symbol)}?lang=${lang}`, 900);
+}
+
+// The backend itself only refreshes every ~20min (see the movers-scan cron
+// workflow), so caching this window at the fetch layer costs no real
+// freshness -- just skips a round trip on repeat navigation.
+export function getMovers(): Promise<MoversScan> {
+  return apiGet<MoversScan>("/api/movers", 300);
 }
 
 export function getCompare(period: string, base: "TRY" | "USD"): Promise<SeriesResult[]> {

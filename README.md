@@ -35,8 +35,16 @@ Makro ortam, piyasa genişliği (breadth), korku/iştah skoru, para akışı öz
 takvim (FOMC/NFP/bilanço) tek sayfada.
 
 **⚡ My Trade**
-İndikatör bazlı hisse tarama (3 farklı sinyal grubu: momentum+hacim+Bollinger, trend+sapma+
-StochRSI, ATR dönüş+trend rengi) ve stop-loss/pozisyon boyutu (%1 kuralı) hesaplayıcısı.
+İndikatör bazlı hisse tarama (4 farklı sinyal grubu: momentum+hacim+Bollinger, trend+sapma+
+StochRSI, ATR dönüş+trend rengi, StochRSI+EMA+Medyan) ve stop-loss/pozisyon boyutu (%1 kuralı)
+hesaplayıcısı.
+
+**🚀 Günün Hareketlileri (Movers)**
+ABD piyasası, arka planda ~20 dakikada bir taranır (bkz. `.github/workflows/movers-scan.yml`):
+Yahoo'nun günlük "en çok yükselenler" sıralaması + fiyatı henüz büyük hareket etmemişken hacmi
+3 aylık ortalamasının kat kat üstüne çıkmış "hacim öncüllüğü" adayları. Her iki liste My Trade'in
+indikatör taramasına (Grup 1-4) karşı da kontrol edilir, öne çıkan isimler için son haber
+başlıkları otomatik eklenir — "neden yükseliyor" sorusuna hızlı bir cevap.
 
 **🎯 Opsiyon Radarı**
 ABD hisse/ETF'lerinde opsiyon akışı (Yahoo Finance, ~15 dk gecikmeli, ücretsiz): call/put
@@ -62,6 +70,7 @@ portfoy/                # Paylaşılan Python çekirdeği (hem api/ hem testler 
 ├── risk.py             # metrikler + uyarı motoru (saf, test edilebilir)
 ├── rotation.py         # sektör rotasyonu / RRG matematiği (saf)
 ├── trade_scan.py       # My Trade indikatör tarama grupları (saf)
+├── movers.py           # Günün hareketlileri: day gainers + hacim öncüllüğü taraması
 ├── performance.py      # getiri karşılaştırma, para birimi çevrimi (saf)
 ├── options.py          # opsiyon hacmi toplama, put/call oranı (saf)
 ├── breadth.py          # piyasa genişliği: SMA üstü %, A/D, zirve/dip (saf)
@@ -98,6 +107,27 @@ Tarayıcıda `http://localhost:3000` açılır, `SITE_PASSWORD` ile giriş yapı
 `data/` klasöründe yerel dosya olarak saklanır (bulut yok, hesap yok, ücret yok) — Vercel'e
 deploy edildiğinde bu, Upstash Redis'e döner (bkz. `portfoy/storage.py` docstring'i).
 
+### Günün Hareketlileri (Movers) kurulumu — production
+
+Movers taraması periyodik olarak GitHub Actions tarafından tetiklenir (Vercel'in ücretsiz
+planında native Cron Jobs günde 2 kere ile sınırlı, gün içi tarama için yetersiz). Kurulum:
+
+1. Vercel projesine bir `CRON_SECRET` environment variable ekle (rastgele, en az 16 karakter
+   uzun bir string — `openssl rand -hex 32` ile üretilebilir).
+2. GitHub reposunda **Settings → Secrets and variables → Actions**:
+   - **Variables** sekmesine `SITE_URL` ekle (örn. `https://your-project.vercel.app`, sonunda
+     `/` olmadan).
+   - **Secrets** sekmesine `CRON_SECRET` ekle — Vercel'e girdiğin değerin **aynısı**.
+3. `.github/workflows/movers-scan.yml` piyasa saatlerinde 20 dakikada bir
+   `/api/cron/movers-scan`'i tetikler; bu route kendi başına `CRON_SECRET` ile doğrulanır
+   (site şifresiyle korunan sayfaların dışındadır, bkz. `web/src/proxy.ts`), sonra dahili
+   servis bağlantısı üzerinden Flask'taki gerçek taramayı çalıştırıp Upstash'e yazar.
+4. İlk tarama tetiklenene kadar (veya Upstash hiç yapılandırılmamışsa) sayfa isteği anında
+   taze bir tarama hesaplar — hiçbir zaman boş kalmaz, sadece daha yavaş yüklenir.
+
+Yerel geliştirmede bu adım gerekmez: `/api/movers` her istekte taze hesaplanır (Upstash yoksa
+kalıcı önbellek de yok).
+
 ## Testler
 
 ```bash
@@ -117,3 +147,5 @@ dilimi), opsiyon hacmi, breadth, korku/iştah skoru ve ekonomik takvim.
 - Flask API, `web/` dışından erişilemez (Vercel internal service binding); `X-API-Key`
   header'ı bu bağlantının kazara dışa açılmasına karşı ek bir savunma katmanıdır
 - Web arayüzü tek bir paylaşılan şifre (`SITE_PASSWORD`) ile korunur, oturum httpOnly cookie'de
+- `/api/cron/movers-scan` tek istisna: şifre gate'inin dışında (dış zamanlayıcının session
+  cookie'si yok), kendi başına `CRON_SECRET` ile (timing-safe karşılaştırma) korunur

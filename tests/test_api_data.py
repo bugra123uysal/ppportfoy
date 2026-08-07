@@ -291,6 +291,26 @@ class TestCalendarPayload:
         assert all(e.symbol != "THYAO.IS" for e in events)
 
 
+def _unexpected_rescan():
+    raise AssertionError("build_movers_scan should not run when a snapshot is already persisted")
+
+
+class TestMoversPayload:
+    def test_returns_persisted_snapshot_without_rescanning(self, monkeypatch):
+        snapshot = {"generated_at": "2026-01-01T00:00:00+00:00", "gainers": [], "volume_spikes": []}
+        monkeypatch.setattr(api_data, "load_snapshot", lambda: snapshot)
+        monkeypatch.setattr(api_data, "build_movers_scan", _unexpected_rescan)
+        assert api_data.movers_payload() == snapshot
+
+    def test_falls_back_to_a_fresh_scan_when_nothing_persisted(self, monkeypatch):
+        from portfoy.movers import MoversScan
+
+        scan = MoversScan(generated_at="2026-01-01T00:00:00+00:00", gainers=[], volume_spikes=[])
+        monkeypatch.setattr(api_data, "load_snapshot", lambda: None)
+        monkeypatch.setattr(api_data, "build_movers_scan", lambda: scan)
+        assert api_data.movers_payload() is scan
+
+
 class TestNewsPayload:
     def test_delegates_to_news_module(self, monkeypatch):
         from portfoy import news

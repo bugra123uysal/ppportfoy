@@ -210,6 +210,29 @@ FUNDAMENTALS_PEG_EXPENSIVE = 2.0    # PEG above this reads as expensive relative
 FUNDAMENTALS_EV_EBITDA_CHEAP = 10.0     # capital-structure-neutral valuation, low = attractive
 FUNDAMENTALS_EV_EBITDA_EXPENSIVE = 15.0
 
+# --- My Trade: günün hareketlileri (movers) --------------------------------
+# ABD piyasası ile sınırlı -- Yahoo'nun screen() API'si (yfinance >=1.4) BIST
+# için güvenilir/kapsamlı bir evren sunmuyor. İki tamamlayıcı, ücretsiz
+# sinyal: (1) Yahoo'nun kendi "day_gainers" taraması -- geriye dönük, zaten
+# hareket etmiş isimler; (2) hacim öncüllüğü -- fiyat henüz büyük hareket
+# etmemişken hacmi 3 aylık ortalamasının kat kat üstüne çıkmış isimler,
+# "hacim genelde fiyattan önce gelir" mantığıyla olası erken adaylar.
+# Sonuç, arka planda (cron ile) periyodik taranıp Upstash'e yazılır -- sayfa
+# ziyaretinde her seferinde yeniden hesaplanmaz, bkz. movers.py.
+MOVERS_GAINERS_COUNT = 15                 # yf.screen("day_gainers", count=...)
+MOVERS_SPIKE_CANDIDATE_POOL = 250         # taranacak aday sayısı (yf.screen max: 250)
+MOVERS_SPIKE_FLAT_PCT = 4.0               # bu aralıktaki |değişim| "henüz hareket etmemiş" sayılır
+MOVERS_SPIKE_MIN_MARKETCAP = 500_000_000  # likidite filtresi -- çok küçük/gürültülü isimleri ele
+MOVERS_SPIKE_RVOL_THRESHOLD = 2.0         # hacim / 3 aylık ort. hacim; bu katın üstü "sivri"
+MOVERS_SPIKE_TOP_N = 15                   # RVOL'e göre sıralı sonuçtan gösterilecek sayı
+MOVERS_NEWS_TOP_N = 8                     # her listeden en fazla bu kadarına haber eklenir
+MOVERS_NEWS_MAX_WORKERS = 8               # haber çekimi bu kadar thread'le paralel yapılır
+MOVERS_SNAPSHOT_KEY = "portfoy:movers:snapshot"
+# İkinci savunma katmanı: CRON_SECRET/PORTFOY_API_KEY sızsa bile taramanın
+# maliyeti bununla sınırlanır -- bkz. movers.py'nin scan_if_due()'su.
+MOVERS_MIN_SCAN_INTERVAL_SECONDS = 300     # bundan yeni bir anlık görüntü varsa yeniden taranmaz
+MOVERS_FETCH_CACHE_TTL = 300               # yf.screen() çağrılarının kendi kısa ömürlü önbelleği
+
 # --- Risk & Uyarılar: pozisyon sağlığı --------------------------------------
 # Applies the same technical/money-flow/fundamental reads My Trade's scanners
 # use to the user's own holdings instead of the fixed sector-leader universe

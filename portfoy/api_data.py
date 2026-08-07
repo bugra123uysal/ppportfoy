@@ -22,6 +22,7 @@ from .data import AnalystView
 from .fundamentals import build_fundamental_scan
 from .indicators import last_value, sma
 from .money_flow import build_money_flow_scan
+from .movers import MoversScan, build_movers_scan, load_snapshot
 from .options import OptionActivity, rank_by_volume
 from .performance import SeriesResult
 from .position_health import evaluate_portfolio
@@ -191,6 +192,15 @@ def calendar_payload(days: int = config.CALENDAR_LOOKAHEAD_DAYS) -> list[MarketE
         for p in positions if not p.symbol.endswith(".IS")
     }
     return upcoming_events(date.today(), earnings, days)
+
+
+def movers_payload() -> dict | MoversScan:
+    """The latest periodic movers scan (see api/index.py's /api/movers/scan,
+    triggered by an external scheduler). Falls back to a fresh, on-demand
+    scan when nothing has been persisted yet -- no Upstash configured, or
+    the very first request before any scan has ever run."""
+    snapshot = load_snapshot()
+    return snapshot if snapshot is not None else build_movers_scan()
 
 
 def news_payload(symbol: str, lang: str = "tr") -> list[dict]:

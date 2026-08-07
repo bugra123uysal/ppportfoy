@@ -118,6 +118,24 @@ class TestRouteWiring:
         assert resp.get_json() is None
         assert resp.status_code == 200
 
+    def test_movers(self, client, monkeypatch):
+        payload = {"generated_at": "2026-01-01T00:00:00+00:00", "gainers": [], "volume_spikes": []}
+        monkeypatch.setattr(api_index.api_data, "movers_payload", lambda: payload)
+        resp = client.get("/api/movers", headers=AUTH)
+        assert resp.get_json() == payload
+
+    def test_movers_scan_delegates_to_scan_if_due(self, client, monkeypatch):
+        from portfoy.movers import MoversScan
+
+        scan = MoversScan(generated_at="2026-01-01T00:00:00+00:00", gainers=[], volume_spikes=[])
+        monkeypatch.setattr(api_index.movers_module, "scan_if_due", lambda: scan)
+        resp = client.post("/api/movers/scan", headers=AUTH)
+        assert resp.status_code == 200
+        assert resp.get_json()["generated_at"] == "2026-01-01T00:00:00+00:00"
+
+    def test_movers_scan_requires_auth(self, client):
+        assert client.post("/api/movers/scan").status_code == 401
+
     def test_market_sentiment(self, client, monkeypatch):
         monkeypatch.setattr(api_index.api_data, "sentiment_payload", lambda: None)
         assert client.get("/api/market/sentiment", headers=AUTH).status_code == 200

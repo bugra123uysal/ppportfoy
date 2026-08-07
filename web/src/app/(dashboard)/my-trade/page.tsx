@@ -1,7 +1,10 @@
+import { Suspense } from "react";
 import { Panel } from "@/components/panel";
+import { PanelSkeleton } from "@/components/skeleton";
 import { MyTradeClient } from "./my-trade-client";
 import { MoneyFlowPanel } from "./money-flow-panel";
 import { FundamentalPanel } from "./fundamental-panel";
+import { MoversPanel } from "./movers-panel";
 
 export default function MyTradePage() {
   return (
@@ -66,6 +69,10 @@ export default function MyTradePage() {
           </li>
         </ol>
       </Panel>
+
+      <Suspense fallback={<PanelSkeleton />}>
+        <MoversPanel />
+      </Suspense>
 
       <MyTradeClient />
 
