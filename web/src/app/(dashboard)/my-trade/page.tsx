@@ -5,6 +5,7 @@ import { MyTradeClient } from "./my-trade-client";
 import { MoneyFlowPanel } from "./money-flow-panel";
 import { FundamentalPanel } from "./fundamental-panel";
 import { MoversPanel } from "./movers-panel";
+import { VcpScanPanel } from "./vcp-scan-panel";
 
 export default function MyTradePage() {
   return (
@@ -73,6 +74,8 @@ export default function MyTradePage() {
       <Suspense fallback={<PanelSkeleton />}>
         <MoversPanel />
       </Suspense>
+
+      <VcpScanPanel />
 
       <MyTradeClient />
 

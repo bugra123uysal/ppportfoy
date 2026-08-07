@@ -30,6 +30,7 @@ from .risk import PositionMetrics
 from .rotation import build_rotation, build_sector_leaders
 from .sentiment import SentimentScore, build_score
 from .trade_scan import build_trade_scan
+from .vcp_scan import build_vcp_scan
 from .yield_curve import YieldCurveSnapshot, build_yield_curve_snapshot, credit_spread_proxy_change
 
 
@@ -115,6 +116,10 @@ def money_flow_payload() -> dict:
 
 def fundamental_scan_payload() -> dict:
     return {"signals": build_fundamental_scan(_sector_leader_universe())}
+
+
+def vcp_scan_payload() -> dict:
+    return {"candidates": build_vcp_scan(_sector_leader_universe())}
 
 
 def option_activity_payload(symbol: str) -> OptionActivity | None:

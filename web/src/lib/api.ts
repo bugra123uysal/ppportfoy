@@ -184,6 +184,23 @@ export interface FundamentalScanPayload {
   signals: FundamentalSnapshot[];
 }
 
+export interface VcpCandidate {
+  symbol: string;
+  sector: string;
+  price: number;
+  change_1d: number;
+  adr_pct: number;
+  trailing_return_pct: number;
+  range_contraction_pct: number;
+  volume_contraction_pct: number;
+  pct_from_52w_high: number;
+  suggested_stop: number | null;
+}
+
+export interface VcpScanPayload {
+  candidates: VcpCandidate[];
+}
+
 export interface MarketEvent {
   when: string;
   kind: "fomc" | "nfp" | "earnings";
@@ -344,6 +361,11 @@ export function getMoneyFlow(): Promise<MoneyFlowPayload> {
 // load across the whole universe, so this is button-triggered.
 export function getFundamentals(): Promise<FundamentalScanPayload> {
   return apiGet<FundamentalScanPayload>("/api/fundamentals");
+}
+
+// No revalidateSeconds: same on-demand-scan pattern as trade scan/money flow.
+export function getVcpScan(): Promise<VcpScanPayload> {
+  return apiGet<VcpScanPayload>("/api/vcp-scan");
 }
 
 export function getCalendar(days = 45): Promise<MarketEvent[]> {

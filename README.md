@@ -39,6 +39,13 @@ takvim (FOMC/NFP/bilanço) tek sayfada.
 StochRSI, ATR dönüş+trend rengi, StochRSI+EMA+Medyan) ve stop-loss/pozisyon boyutu (%1 kuralı)
 hesaplayıcısı.
 
+**🌀 VCP Taraması**
+Qullamaggie/Minervini tarzı momentum tarama: son ~3 ayda güçlü yükselmiş, şimdi fiyat range'i
+daralan + hacmi kuruyan + 10/20 EMA üstünde + 52 haftalık zirveye yakın hisseleri bulan "gece
+taraması" (bkz. `portfoy/vcp_scan.py`). Aynı sektör-lideri evrenini kullanır; küçük/orta ölçekli
+yüksek beta'lı isimler için tasarlanmış bir yöntem olduğundan bu büyük şirket havuzunda aday
+sayısı az/değişken olabilir.
+
 **🚀 Günün Hareketlileri (Movers)**
 ABD piyasası, arka planda ~20 dakikada bir taranır (bkz. `.github/workflows/movers-scan.yml`):
 Yahoo'nun günlük "en çok yükselenler" sıralaması + fiyatı henüz büyük hareket etmemişken hacmi
@@ -70,6 +77,7 @@ portfoy/                # Paylaşılan Python çekirdeği (hem api/ hem testler 
 ├── risk.py             # metrikler + uyarı motoru (saf, test edilebilir)
 ├── rotation.py         # sektör rotasyonu / RRG matematiği (saf)
 ├── trade_scan.py       # My Trade indikatör tarama grupları (saf)
+├── vcp_scan.py         # VCP (Volatility Contraction Pattern) breakout adayları (saf)
 ├── movers.py           # Günün hareketlileri: day gainers + hacim öncüllüğü taraması
 ├── performance.py      # getiri karşılaştırma, para birimi çevrimi (saf)
 ├── options.py          # opsiyon hacmi toplama, put/call oranı (saf)

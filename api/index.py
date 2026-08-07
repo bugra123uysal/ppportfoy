@@ -156,6 +156,11 @@ def fundamentals() -> Response:
     return _json_response(api_data.fundamental_scan_payload())
 
 
+@app.get("/api/vcp-scan")
+def vcp_scan() -> Response:
+    return _json_response(api_data.vcp_scan_payload())
+
+
 @app.get("/api/options")
 def options_scan() -> Response:
     return _json_response(api_data.options_scan_payload())

@@ -4,6 +4,7 @@ import pytest
 
 from portfoy.indicators import (
     atr,
+    average_daily_range_pct,
     bollinger_bands,
     cci,
     chaikin_money_flow,
@@ -13,8 +14,10 @@ from portfoy.indicators import (
     money_flow_index,
     on_balance_volume,
     pct_change_last,
+    pct_change_over,
     pct_from_52w_high,
     pct_from_52w_low,
+    range_pct,
     rsi,
     sma,
     stochastic_momentum_index,
@@ -258,3 +261,62 @@ class TestPctFrom52wLow:
 
     def test_empty_returns_none(self):
         assert pct_from_52w_low(pd.Series(dtype=float)) is None
+
+
+class TestPctChangeOver:
+    def test_computes_change_from_n_sessions_ago(self):
+        close = pd.Series([100.0, 105.0, 110.0, 121.0])
+        assert pct_change_over(close, 2) == pytest.approx((121.0 / 105.0 - 1.0) * 100.0)
+
+    def test_none_on_insufficient_history(self):
+        close = pd.Series([100.0, 105.0])
+        assert pct_change_over(close, 5) is None
+
+    def test_none_when_reference_price_is_zero(self):
+        close = pd.Series([0.0, 105.0, 110.0])
+        assert pct_change_over(close, 2) is None
+
+
+class TestAverageDailyRangePct:
+    def test_computes_mean_of_daily_high_low_ratio(self):
+        high = pd.Series([110.0] * 20)
+        low = pd.Series([100.0] * 20)
+        assert average_daily_range_pct(high, low, period=20) == pytest.approx(10.0)
+
+    def test_only_uses_trailing_window(self):
+        # A wide-range day outside the window shouldn't drag the average up.
+        high = pd.Series([200.0, *([110.0] * 20)])
+        low = pd.Series([100.0, *([100.0] * 20)])
+        assert average_daily_range_pct(high, low, period=20) == pytest.approx(10.0)
+
+    def test_none_on_insufficient_history(self):
+        high = pd.Series([110.0] * 5)
+        low = pd.Series([100.0] * 5)
+        assert average_daily_range_pct(high, low, period=20) is None
+
+
+class TestRangePct:
+    def test_computes_high_low_span_as_pct_of_last_close(self):
+        high = pd.Series([100.0, 105.0, 103.0, 108.0])
+        low = pd.Series([95.0, 96.0, 97.0, 99.0])
+        close = pd.Series([98.0, 100.0, 101.0, 104.0])
+        # span = max(high) - min(low) = 108 - 95 = 13; last close = 104
+        assert range_pct(high, low, close, period=4) == pytest.approx(13.0 / 104.0 * 100.0)
+
+    def test_contraction_is_visible_as_a_smaller_recent_window(self):
+        high = pd.Series([150.0, 100.0, 101.0, 102.0])
+        low = pd.Series([50.0, 99.0, 100.0, 101.0])
+        close = pd.Series([100.0, 100.0, 100.5, 101.0])
+        wide = range_pct(high, low, close, period=4)
+        narrow = range_pct(high, low, close, period=2)
+        assert narrow < wide
+
+    def test_none_on_insufficient_history(self):
+        high = pd.Series([100.0, 105.0])
+        low = pd.Series([95.0, 96.0])
+        close = pd.Series([98.0, 100.0])
+        assert range_pct(high, low, close, period=10) is None
+
+    def test_none_on_empty_close(self):
+        empty = pd.Series(dtype=float)
+        assert range_pct(empty, empty, empty, 5) is None

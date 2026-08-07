@@ -75,6 +75,51 @@ def pct_from_52w_low(close: pd.Series, window: int = 252) -> float | None:
     return (float(clean.iloc[-1]) / low - 1.0) * 100.0
 
 
+def pct_change_over(close: pd.Series, period: int) -> float | None:
+    """% change from `period` sessions ago to the latest close. None if
+    there isn't enough history yet -- distinct from pct_change_last, which
+    is always the single most-recent bar-to-bar move."""
+    clean = close.dropna()
+    if len(clean) < period + 1:
+        return None
+    prev = float(clean.iloc[-period - 1])
+    if prev == 0:
+        return None
+    return (float(clean.iloc[-1]) / prev - 1.0) * 100.0
+
+
+def average_daily_range_pct(high: pd.Series, low: pd.Series, period: int = 20) -> float | None:
+    """Average Daily Range % -- the standard "is this stock even a mover"
+    filter (Qullamaggie/Minervini-style breakout screening): the mean of
+    each day's own (High/Low - 1) over the trailing `period` sessions, as a
+    percent. Distinct from ATR (which measures true range, gap-inclusive,
+    in price units) and from range_pct (one trailing high-low span, not an
+    average of daily ranges)."""
+    ratio = (high / low.replace(0.0, np.nan) - 1.0) * 100.0
+    recent = ratio.dropna().tail(period)
+    if len(recent) < period:
+        return None
+    return float(recent.mean())
+
+
+def range_pct(high: pd.Series, low: pd.Series, close: pd.Series, period: int) -> float | None:
+    """(highest high - lowest low) over the trailing `period` sessions, as a
+    % of the latest close -- one trailing high-low span, not an average of
+    daily ranges (see average_daily_range_pct for that). Comparing this at
+    two different `period` values is how a volatility contraction (a
+    tightening trading range) gets measured."""
+    clean_close = close.dropna()
+    if clean_close.empty:
+        return None
+    last_price = float(clean_close.iloc[-1])
+    if last_price <= 0:
+        return None
+    recent_high, recent_low = high.tail(period), low.tail(period)
+    if len(recent_high.dropna()) < period or len(recent_low.dropna()) < period:
+        return None
+    return float((recent_high.max() - recent_low.min()) / last_price * 100.0)
+
+
 def last_value(series: pd.Series) -> float | None:
     clean = series.dropna()
     if clean.empty:

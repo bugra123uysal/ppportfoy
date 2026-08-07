@@ -233,6 +233,35 @@ MOVERS_SNAPSHOT_KEY = "portfoy:movers:snapshot"
 MOVERS_MIN_SCAN_INTERVAL_SECONDS = 300     # bundan yeni bir anlık görüntü varsa yeniden taranmaz
 MOVERS_FETCH_CACHE_TTL = 300               # yf.screen() çağrılarının kendi kısa ömürlü önbelleği
 
+# --- My Trade: VCP (Volatility Contraction Pattern) breakout adayları ------
+# Qullamaggie/Minervini tarzı "gece taraması": son birkaç ayda güçlü hareket
+# etmiş, şimdi sıkışan (daralan range + kuruyan hacim) hisseleri bulur --
+# "patlamaya kurulu" aday listesi (bkz. portfoy/vcp_scan.py). Aynı
+# SECTOR_LEADER_STOCKS evrenini kullanır. Bu metodoloji orijinalde küçük/
+# orta ölçekli, yüksek beta'lı isimlerde taranır; bu evren tanıdık büyük
+# ölçekli isimlerden oluştuğu için ADR eşiğini geçen aday sayısı az/hatta
+# bazı günler sıfır olabilir -- bu bir kusur değil, evrenin doğal sınırı.
+VCP_HISTORY_PERIOD = "1y"
+VCP_CACHE_TTL = 3600
+VCP_ADR_PERIOD = 20
+VCP_ADR_MIN_PCT = 3.0                     # ortalama günlük range bunun altındaysa "hareketsiz", ele
+VCP_TRAILING_RETURN_LOOKBACK_DAYS = 63     # ~3 ay
+VCP_TRAILING_RETURN_MIN_PCT = 15.0         # patlamadan önce aranan öncü rally eşiği
+VCP_RECENT_RANGE_DAYS = 10
+# Not "önceki 40 gün" (hariç) -- son 40 günün range'i, son 10 günü de kapsar
+# (ikisi de bugüne çıpalı .tail() penceresi). Kısa pencere uzun pencerenin
+# alt kümesi olduğu için kısa/uzun oranı yapısal olarak <=100 -- amaç dışlamak
+# değil, "son birkaç gün, son bir buçuk ayın tipik salınımına göre ne kadar
+# sıkıştı" sorusunu ölçmek.
+VCP_BASELINE_RANGE_DAYS = 40
+VCP_RANGE_CONTRACTION_MAX_PCT = 60.0       # son 10g range, son 40g range'in en fazla bu yüzdesi
+VCP_RECENT_VOLUME_DAYS = 10
+VCP_BASELINE_VOLUME_DAYS = 50              # aynı çıpalı-pencere mantığı -- yukarıdaki notu bkz.
+VCP_VOLUME_CONTRACTION_MAX_PCT = 70.0      # son 10g ort. hacim, son 50g ort.nın en fazla bu %'si
+VCP_EMA_FAST = 10
+VCP_EMA_SLOW = 20
+VCP_NEAR_52W_HIGH_MAX_PCT = -15.0          # 52 haftalık zirveden en fazla bu kadar uzak olabilir
+
 # --- Risk & Uyarılar: pozisyon sağlığı --------------------------------------
 # Applies the same technical/money-flow/fundamental reads My Trade's scanners
 # use to the user's own holdings instead of the fixed sector-leader universe

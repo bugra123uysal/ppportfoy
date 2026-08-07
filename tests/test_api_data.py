@@ -291,6 +291,24 @@ class TestCalendarPayload:
         assert all(e.symbol != "THYAO.IS" for e in events)
 
 
+class TestVcpScanPayload:
+    def test_empty_history_yields_no_candidates(self, monkeypatch):
+        monkeypatch.setattr(api_data.data, "get_histories", lambda symbols, period=None: {})
+        assert api_data.vcp_scan_payload() == {"candidates": []}
+
+    def test_universe_covers_every_sector_leader_stock(self, monkeypatch):
+        captured = {}
+
+        def fake_histories(symbols, period=None):
+            captured.update({sym: True for sym in symbols})
+            return {}
+
+        monkeypatch.setattr(api_data.data, "get_histories", fake_histories)
+        api_data.vcp_scan_payload()
+        all_stocks = {s for stocks in config.SECTOR_LEADER_STOCKS.values() for s in stocks}
+        assert set(captured) == all_stocks
+
+
 def _unexpected_rescan():
     raise AssertionError("build_movers_scan should not run when a snapshot is already persisted")
 

@@ -101,6 +101,11 @@ class TestRouteWiring:
         resp = client.get("/api/fundamentals", headers=AUTH)
         assert resp.get_json() == {"signals": []}
 
+    def test_vcp_scan(self, client, monkeypatch):
+        monkeypatch.setattr(api_index.api_data, "vcp_scan_payload", lambda: {"candidates": []})
+        resp = client.get("/api/vcp-scan", headers=AUTH)
+        assert resp.get_json() == {"candidates": []}
+
     def test_option_activity_passes_normalized_symbol(self, client, monkeypatch):
         captured = {}
         monkeypatch.setattr(api_index.api_data, "option_activity_payload",

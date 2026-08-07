@@ -4,9 +4,11 @@ import {
   getFundamentals,
   getMoneyFlow,
   getTradeScan,
+  getVcpScan,
   type FundamentalScanPayload,
   type MoneyFlowPayload,
   type TradeScanPayload,
+  type VcpScanPayload,
 } from "@/lib/api";
 
 export interface TradeScanState {
@@ -45,6 +47,20 @@ export interface FundamentalScanState {
 export async function runFundamentalScanAction(): Promise<FundamentalScanState> {
   try {
     const data = await getFundamentals();
+    return { data, error: null };
+  } catch {
+    return { data: null, error: "Tarama başarısız oldu, tekrar dene." };
+  }
+}
+
+export interface VcpScanState {
+  data: VcpScanPayload | null;
+  error: string | null;
+}
+
+export async function runVcpScanAction(): Promise<VcpScanState> {
+  try {
+    const data = await getVcpScan();
     return { data, error: null };
   } catch {
     return { data: null, error: "Tarama başarısız oldu, tekrar dene." };
