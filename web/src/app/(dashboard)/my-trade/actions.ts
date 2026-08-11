@@ -3,10 +3,12 @@
 import {
   getFundamentals,
   getMoneyFlow,
+  getRotationOverlap,
   getTradeScan,
   getVcpScan,
   type FundamentalScanPayload,
   type MoneyFlowPayload,
+  type RotationOverlapPayload,
   type TradeScanPayload,
   type VcpScanPayload,
 } from "@/lib/api";
@@ -61,6 +63,20 @@ export interface VcpScanState {
 export async function runVcpScanAction(): Promise<VcpScanState> {
   try {
     const data = await getVcpScan();
+    return { data, error: null };
+  } catch {
+    return { data: null, error: "Tarama başarısız oldu, tekrar dene." };
+  }
+}
+
+export interface RotationOverlapState {
+  data: RotationOverlapPayload | null;
+  error: string | null;
+}
+
+export async function runRotationOverlapAction(): Promise<RotationOverlapState> {
+  try {
+    const data = await getRotationOverlap();
     return { data, error: null };
   } catch {
     return { data: null, error: "Tarama başarısız oldu, tekrar dene." };

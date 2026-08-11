@@ -6,6 +6,7 @@ import { MoneyFlowPanel } from "./money-flow-panel";
 import { FundamentalPanel } from "./fundamental-panel";
 import { MoversPanel } from "./movers-panel";
 import { VcpScanPanel } from "./vcp-scan-panel";
+import { RotationOverlapPanel } from "./rotation-overlap-panel";
 
 export default function MyTradePage() {
   return (
@@ -74,6 +75,8 @@ export default function MyTradePage() {
       <Suspense fallback={<PanelSkeleton />}>
         <MoversPanel />
       </Suspense>
+
+      <RotationOverlapPanel />
 
       <VcpScanPanel />
 

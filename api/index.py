@@ -161,6 +161,11 @@ def vcp_scan() -> Response:
     return _json_response(api_data.vcp_scan_payload())
 
 
+@app.get("/api/rotation-overlap")
+def rotation_overlap() -> Response:
+    return _json_response(api_data.rotation_overlap_payload())
+
+
 @app.get("/api/options")
 def options_scan() -> Response:
     return _json_response(api_data.options_scan_payload())

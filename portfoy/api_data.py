@@ -28,6 +28,7 @@ from .performance import SeriesResult
 from .position_health import evaluate_portfolio
 from .risk import PositionMetrics
 from .rotation import build_rotation, build_sector_leaders
+from .rotation_overlap import build_rotation_overlap
 from .sentiment import SentimentScore, build_score
 from .trade_scan import build_trade_scan
 from .vcp_scan import build_vcp_scan
@@ -77,8 +78,18 @@ def portfolio_history_payload() -> list[dict]:
     return storage.load_history()
 
 
+def _sector_and_leader_symbols() -> tuple[list[str], list[str]]:
+    """(benchmark + sector ETF symbols, flattened leader-pool symbols) --
+    the two symbol groups every rotation-scoring weekly-closes fetch needs.
+    """
+    return (
+        [config.RRG_BENCHMARK, *config.SECTOR_ETFS],
+        [sym for stocks in config.SECTOR_LEADER_STOCKS.values() for sym in stocks],
+    )
+
+
 def rotation_payload(include_mine: bool = False) -> dict:
-    symbols = [config.RRG_BENCHMARK, *config.SECTOR_ETFS]
+    symbols, leader_symbols = _sector_and_leader_symbols()
     labels = dict(config.SECTOR_ETFS)
     if include_mine:
         positions = storage.load_portfolio()
@@ -88,7 +99,6 @@ def rotation_payload(include_mine: bool = False) -> dict:
         ]
         symbols.extend(mine)
         labels.update({sym: ("Portföyüm", "My holding") for sym in mine})
-    leader_symbols = [sym for stocks in config.SECTOR_LEADER_STOCKS.values() for sym in stocks]
     closes = data.get_weekly_closes(tuple(dict.fromkeys([*symbols, *leader_symbols])))
     if closes.empty:
         return {"sectors": [], "leaders": {}}
@@ -120,6 +130,31 @@ def fundamental_scan_payload() -> dict:
 
 def vcp_scan_payload() -> dict:
     return {"candidates": build_vcp_scan(_sector_leader_universe())}
+
+
+def rotation_overlap_payload() -> dict:
+    """Sector-rotation candidates (top performers within a currently
+    leading/improving RRG sector) that My Trade's own scanners also flag
+    bullish -- runs all four scans (rotation + trade_scan + vcp + money_flow)
+    fresh on every call, same on-demand-scan pattern as the other My Trade
+    panels (button-triggered, not page-load: money_flow's per-symbol
+    ownership reads are too slow for that)."""
+    symbols, leader_symbols = _sector_and_leader_symbols()
+    closes = data.get_weekly_closes(tuple(dict.fromkeys([*symbols, *leader_symbols])))
+    if closes.empty:
+        return {"candidates": []}
+    sectors = build_rotation(closes, dict(config.SECTOR_ETFS), reference=list(config.SECTOR_ETFS))
+    leaders = build_sector_leaders(closes, config.SECTOR_LEADER_STOCKS)
+
+    universe = _sector_leader_universe()
+    candidates = build_rotation_overlap(
+        sectors,
+        leaders,
+        build_trade_scan(universe),
+        build_vcp_scan(universe),
+        build_money_flow_scan(universe),
+    )
+    return {"candidates": candidates}
 
 
 def option_activity_payload(symbol: str) -> OptionActivity | None:

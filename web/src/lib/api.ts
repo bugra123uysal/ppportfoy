@@ -201,6 +201,17 @@ export interface VcpScanPayload {
   candidates: VcpCandidate[];
 }
 
+export interface RotationOverlapCandidate {
+  symbol: string;
+  sector: string;
+  perf_1m: number;
+  signals: string[];
+}
+
+export interface RotationOverlapPayload {
+  candidates: RotationOverlapCandidate[];
+}
+
 export interface MarketEvent {
   when: string;
   kind: "fomc" | "nfp" | "earnings";
@@ -366,6 +377,13 @@ export function getFundamentals(): Promise<FundamentalScanPayload> {
 // No revalidateSeconds: same on-demand-scan pattern as trade scan/money flow.
 export function getVcpScan(): Promise<VcpScanPayload> {
   return apiGet<VcpScanPayload>("/api/vcp-scan");
+}
+
+// No revalidateSeconds: runs rotation + all three My Trade scans server-side
+// on every call (money_flow's per-symbol ownership reads are slow), so this
+// is button-triggered like the other My Trade panels, not page-load.
+export function getRotationOverlap(): Promise<RotationOverlapPayload> {
+  return apiGet<RotationOverlapPayload>("/api/rotation-overlap");
 }
 
 export function getCalendar(days = 45): Promise<MarketEvent[]> {

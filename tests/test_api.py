@@ -106,6 +106,13 @@ class TestRouteWiring:
         resp = client.get("/api/vcp-scan", headers=AUTH)
         assert resp.get_json() == {"candidates": []}
 
+    def test_rotation_overlap(self, client, monkeypatch):
+        monkeypatch.setattr(
+            api_index.api_data, "rotation_overlap_payload", lambda: {"candidates": []}
+        )
+        resp = client.get("/api/rotation-overlap", headers=AUTH)
+        assert resp.get_json() == {"candidates": []}
+
     def test_option_activity_passes_normalized_symbol(self, client, monkeypatch):
         captured = {}
         monkeypatch.setattr(api_index.api_data, "option_activity_payload",

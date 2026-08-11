@@ -13,8 +13,11 @@ import pytest
 
 from portfoy import api_data, config
 from portfoy.data import AnalystView, Quote
+from portfoy.money_flow import MoneyFlowSignal
 from portfoy.options import OptionActivity
 from portfoy.storage import CashHolding, Position
+from portfoy.trade_scan import TradeSignal
+from portfoy.vcp_scan import VcpCandidate
 
 AAPL = Position(symbol="AAPL", quantity=10.0, avg_cost=100.0, currency="USD",
                  added="2026-01-01", notes="")
@@ -132,6 +135,71 @@ class TestRotationPayload:
         out = api_data.rotation_payload()
         assert isinstance(out["sectors"], list)
         assert set(out["leaders"]) == set(config.SECTOR_LEADER_STOCKS)
+
+
+class TestRotationOverlapPayload:
+    def test_empty_closes_returns_empty_candidates(self, monkeypatch):
+        monkeypatch.setattr(api_data.data, "get_weekly_closes", lambda symbols: pd.DataFrame())
+        assert api_data.rotation_overlap_payload() == {"candidates": []}
+
+    def test_runs_all_three_my_trade_scans_over_the_full_universe(self, monkeypatch):
+        idx = pd.date_range("2023-01-01", periods=160, freq="W")
+        symbols = [config.RRG_BENCHMARK, *config.SECTOR_ETFS]
+        leader_symbols = [s for stocks in config.SECTOR_LEADER_STOCKS.values() for s in stocks]
+        data_cols = {sym: pd.Series(range(160), index=idx, dtype=float) + 100.0
+                     for sym in dict.fromkeys([*symbols, *leader_symbols])}
+        closes = pd.DataFrame(data_cols)
+        monkeypatch.setattr(api_data.data, "get_weekly_closes", lambda syms: closes)
+
+        # Every symbol shares the identical price series above, so every
+        # sector lands in the same RRG quadrant and every XLK leader (AAPL,
+        # MSFT, NVDA -- the pool's first three, tied on perf so ranked by
+        # config order) is a rotation candidate. One real, distinguishable
+        # signal per scan (rather than all three returning []) proves each
+        # scan's result reaches build_rotation_overlap through the right
+        # positional argument -- a swap between two of the three would
+        # either surface the wrong signal label below or raise
+        # AttributeError (the three signal dataclasses don't share fields).
+        captured: dict[str, set] = {}
+
+        def fake_trade_scan(universe):
+            captured["trade_scan"] = set(universe)
+            return [TradeSignal(
+                symbol="AAPL", sector="Teknoloji", price=200.0, change_1d=1.0,
+                direction="long", groups=[1], atr_14=2.0, suggested_stop=195.0,
+                pct_from_52w_high=-5.0, pct_from_52w_low=20.0, weekly_trend_aligned=True,
+            )]
+
+        def fake_vcp_scan(universe):
+            captured["vcp"] = set(universe)
+            return [VcpCandidate(
+                symbol="MSFT", sector="Teknoloji", price=400.0, change_1d=1.0, adr_pct=4.0,
+                trailing_return_pct=20.0, range_contraction_pct=50.0,
+                volume_contraction_pct=60.0, pct_from_52w_high=-5.0, suggested_stop=390.0,
+            )]
+
+        def fake_money_flow_scan(universe):
+            captured["money_flow"] = set(universe)
+            return [MoneyFlowSignal(
+                symbol="NVDA", sector="Teknoloji", price=120.0, change_1d=1.0, cmf=0.2,
+                cmf_signal="accumulation", mfi=55.0, obv_trend="yukselis",
+                institutional_pct=80.0, insider_net_pct_6m=1.0,
+            )]
+
+        monkeypatch.setattr(api_data, "build_trade_scan", fake_trade_scan)
+        monkeypatch.setattr(api_data, "build_vcp_scan", fake_vcp_scan)
+        monkeypatch.setattr(api_data, "build_money_flow_scan", fake_money_flow_scan)
+        out = api_data.rotation_overlap_payload()
+
+        all_stocks = {s for stocks in config.SECTOR_LEADER_STOCKS.values() for s in stocks}
+        assert captured["trade_scan"] == all_stocks
+        assert captured["vcp"] == all_stocks
+        assert captured["money_flow"] == all_stocks
+
+        by_symbol = {c.symbol: c for c in out["candidates"]}
+        assert by_symbol["AAPL"].signals == ("trade_scan_long",)
+        assert by_symbol["MSFT"].signals == ("vcp",)
+        assert by_symbol["NVDA"].signals == ("money_flow_accumulation",)
 
 
 class TestTradeScanPayload:
