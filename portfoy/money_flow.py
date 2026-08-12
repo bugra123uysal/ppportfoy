@@ -37,7 +37,7 @@ class MoneyFlowSignal:
     insider_net_pct_6m: float | None
 
 
-def _cmf_signal(value: float | None) -> str:
+def cmf_signal(value: float | None) -> str:
     if value is None:
         return "notr"
     if value > config.CMF_THRESHOLD:
@@ -47,7 +47,7 @@ def _cmf_signal(value: float | None) -> str:
     return "notr"
 
 
-def _obv_trend(obv: pd.Series) -> str:
+def obv_trend(obv: pd.Series) -> str:
     lookback = config.OBV_TREND_LOOKBACK
     if len(obv) <= lookback:
         return "yatay"
@@ -85,9 +85,9 @@ def scan_symbol(symbol: str, sector: str, df: pd.DataFrame) -> MoneyFlowSignal |
         price=float(df["Close"].iloc[-1]),
         change_1d=pct_change_last(df["Close"]),
         cmf=cmf_last,
-        cmf_signal=_cmf_signal(cmf_last),
+        cmf_signal=cmf_signal(cmf_last),
         mfi=mfi_last,
-        obv_trend=_obv_trend(obv),
+        obv_trend=obv_trend(obv),
         institutional_pct=ownership.institutional_pct if ownership else None,
         insider_net_pct_6m=ownership.insider_net_pct_6m if ownership else None,
     )

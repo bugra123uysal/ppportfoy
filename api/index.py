@@ -176,6 +176,11 @@ def option_activity(symbol: str) -> Response:
     return _json_response(api_data.option_activity_payload(_clean_symbol(symbol)))
 
 
+@app.get("/api/report/<symbol>")
+def symbol_report(symbol: str) -> Response:
+    return _json_response(api_data.report_payload(_clean_symbol(symbol)))
+
+
 @app.get("/api/market/breadth")
 def market_breadth() -> Response:
     return _json_response(api_data.breadth_payload())

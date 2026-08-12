@@ -278,6 +278,17 @@ class TestOptionsPayloads:
         assert [a.symbol for a in out][:1] == ["SPY"]
 
 
+class TestReportPayload:
+    def test_delegates_to_build_report(self, monkeypatch):
+        sentinel = object()
+        monkeypatch.setattr(api_data, "build_report", lambda symbol: sentinel)
+        assert api_data.report_payload("AAPL") is sentinel
+
+    def test_none_on_unknown_symbol(self, monkeypatch):
+        monkeypatch.setattr(api_data, "build_report", lambda symbol: None)
+        assert api_data.report_payload("ZZZZ") is None
+
+
 class TestBreadthAndSentiment:
     def test_breadth_none_on_empty_closes(self, monkeypatch):
         monkeypatch.setattr(api_data.data, "get_daily_closes", lambda symbols: pd.DataFrame())

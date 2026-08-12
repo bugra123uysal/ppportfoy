@@ -17,7 +17,6 @@ from portfoy.trade_scan import (
     _group4_buy_stochrsi_ema_median,
     _group4_sell_stochrsi_ema,
     _median_trend_up,
-    _weekly_trend_up,
     build_trade_scan,
 )
 
@@ -301,34 +300,6 @@ class TestGroup4SellStochRsiEma:
     def test_false_on_flat_series(self):
         df = _frame(np.full(N, 100.0).tolist())
         assert _group4_sell_stochrsi_ema(df) is False
-
-
-class TestWeeklyTrendUp:
-    def _dated_frame(self, close: np.ndarray) -> pd.DataFrame:
-        index = pd.date_range("2024-01-01", periods=len(close), freq="B")
-        return pd.DataFrame(
-            {
-                "Open": close, "High": close + 1.0, "Low": close - 1.0, "Close": close,
-                "Volume": np.full(len(close), 1000.0),
-            },
-            index=index,
-        )
-
-    def test_none_without_datetime_index(self):
-        df = _frame(np.linspace(100, 200, N).tolist())
-        assert _weekly_trend_up(df) is None
-
-    def test_true_on_weekly_uptrend(self):
-        df = self._dated_frame(np.linspace(100.0, 300.0, 400))
-        assert _weekly_trend_up(df) is True
-
-    def test_false_on_weekly_downtrend(self):
-        df = self._dated_frame(np.linspace(300.0, 100.0, 400))
-        assert _weekly_trend_up(df) is False
-
-    def test_none_on_short_history(self):
-        df = self._dated_frame(np.linspace(100.0, 110.0, 30))
-        assert _weekly_trend_up(df) is None
 
 
 class TestBuildTradeScan:

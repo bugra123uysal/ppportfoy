@@ -26,6 +26,7 @@ from .movers import MoversScan, build_movers_scan, load_snapshot
 from .options import OptionActivity, rank_by_volume
 from .performance import SeriesResult
 from .position_health import evaluate_portfolio
+from .report import SymbolReport, build_report
 from .risk import PositionMetrics
 from .rotation import build_rotation, build_sector_leaders
 from .rotation_overlap import build_rotation_overlap
@@ -241,6 +242,10 @@ def movers_payload() -> dict | MoversScan:
     the very first request before any scan has ever run."""
     snapshot = load_snapshot()
     return snapshot if snapshot is not None else build_movers_scan()
+
+
+def report_payload(symbol: str) -> SymbolReport | None:
+    return build_report(symbol)
 
 
 def news_payload(symbol: str, lang: str = "tr") -> list[dict]:

@@ -239,6 +239,22 @@ def on_balance_volume(close: pd.Series, volume: pd.Series) -> pd.Series:
     return (direction * volume).cumsum()
 
 
+def weekly_trend_up(close: pd.Series, ema_period: int) -> bool | None:
+    """Resamples a daily close series to weekly bars and checks whether its
+    EMA is higher now than it was 6 weeks ago. None means not enough weekly
+    history yet to judge, not "flat" -- the caller should treat None as
+    "unknown", not as a false reading."""
+    if not isinstance(close.index, pd.DatetimeIndex):
+        return None
+    weekly = close.resample("W").last().dropna()
+    if len(weekly) < ema_period + 6:
+        return None
+    weekly_ema = ema(weekly, ema_period)
+    if weekly_ema.iloc[-6:].isna().any():
+        return None
+    return bool(weekly_ema.iloc[-1] > weekly_ema.iloc[-6])
+
+
 def ut_bot_trailing_stop(
     close: pd.Series,
     high: pd.Series,

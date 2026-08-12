@@ -6,9 +6,9 @@ from portfoy import money_flow
 from portfoy.data import OwnershipFlow
 from portfoy.money_flow import (
     MoneyFlowSignal,
-    _cmf_signal,
-    _obv_trend,
     build_money_flow_scan,
+    cmf_signal,
+    obv_trend,
 )
 
 N = 40
@@ -29,35 +29,35 @@ def _frame(close: list[float]) -> pd.DataFrame:
 
 class TestCmfSignal:
     def test_none_is_notr(self):
-        assert _cmf_signal(None) == "notr"
+        assert cmf_signal(None) == "notr"
 
     def test_above_threshold_is_accumulation(self):
-        assert _cmf_signal(0.2) == "accumulation"
+        assert cmf_signal(0.2) == "accumulation"
 
     def test_below_negative_threshold_is_distribution(self):
-        assert _cmf_signal(-0.2) == "distribution"
+        assert cmf_signal(-0.2) == "distribution"
 
     def test_near_zero_is_notr(self):
-        assert _cmf_signal(0.01) == "notr"
-        assert _cmf_signal(-0.01) == "notr"
+        assert cmf_signal(0.01) == "notr"
+        assert cmf_signal(-0.01) == "notr"
 
 
 class TestObvTrend:
     def test_rising_series(self):
         obv = pd.Series(np.linspace(0, 1000, 30))
-        assert _obv_trend(obv) == "yukselis"
+        assert obv_trend(obv) == "yukselis"
 
     def test_falling_series(self):
         obv = pd.Series(np.linspace(1000, 0, 30))
-        assert _obv_trend(obv) == "dusus"
+        assert obv_trend(obv) == "dusus"
 
     def test_flat_series(self):
         obv = pd.Series(np.full(30, 500.0))
-        assert _obv_trend(obv) == "yatay"
+        assert obv_trend(obv) == "yatay"
 
     def test_too_short_is_yatay(self):
         obv = pd.Series([1.0, 2.0, 3.0])
-        assert _obv_trend(obv) == "yatay"
+        assert obv_trend(obv) == "yatay"
 
 
 class TestBuildMoneyFlowScan:

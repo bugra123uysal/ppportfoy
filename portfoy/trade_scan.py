@@ -77,6 +77,7 @@ from .indicators import (
     stochastic_rsi,
     ut_bot_trailing_stop,
     volume_sma,
+    weekly_trend_up,
 )
 
 
@@ -257,22 +258,6 @@ def _atr_last(df: pd.DataFrame) -> float | None:
     return None if atr14.empty or pd.isna(atr14.iloc[-1]) else float(atr14.iloc[-1])
 
 
-def _weekly_trend_up(df: pd.DataFrame) -> bool | None:
-    """Weekly EMA direction, resampled from the same daily frame already
-    fetched for the daily setups -- no extra network call. None means not
-    enough weekly history yet to judge, not "flat"."""
-    if not isinstance(df.index, pd.DatetimeIndex):
-        return None
-    weekly = df["Close"].resample("W").last().dropna()
-    period = config.WEEKLY_TREND_EMA
-    if len(weekly) < period + 6:
-        return None
-    weekly_ema = ema(weekly, period)
-    if weekly_ema.iloc[-6:].isna().any():
-        return None
-    return bool(weekly_ema.iloc[-1] > weekly_ema.iloc[-6])
-
-
 def scan_symbol(symbol: str, sector: str, df: pd.DataFrame) -> list[TradeSignal]:
     """The part of `build_trade_scan` that doesn't fetch -- pure per-symbol
     scoring against an already-fetched history. Split out so callers who
@@ -316,7 +301,7 @@ def scan_symbol(symbol: str, sector: str, df: pd.DataFrame) -> list[TradeSignal]
     change_1d = pct_change_last(df["Close"])
     high52 = pct_from_52w_high(df["Close"], config.WEEK_52_TRADING_DAYS)
     low52 = pct_from_52w_low(df["Close"], config.WEEK_52_TRADING_DAYS)
-    weekly_up = _weekly_trend_up(df)
+    weekly_up = weekly_trend_up(df["Close"], config.WEEKLY_TREND_EMA)
 
     results: list[TradeSignal] = []
     if long_groups:

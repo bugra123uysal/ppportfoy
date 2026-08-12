@@ -24,6 +24,7 @@ from portfoy.indicators import (
     stochastic_rsi,
     ut_bot_trailing_stop,
     volume_sma,
+    weekly_trend_up,
 )
 
 
@@ -320,3 +321,25 @@ class TestRangePct:
     def test_none_on_empty_close(self):
         empty = pd.Series(dtype=float)
         assert range_pct(empty, empty, empty, 5) is None
+
+
+class TestWeeklyTrendUp:
+    def _dated_close(self, values: np.ndarray) -> pd.Series:
+        index = pd.date_range("2024-01-01", periods=len(values), freq="B")
+        return pd.Series(values, index=index)
+
+    def test_none_without_datetime_index(self):
+        close = pd.Series(np.linspace(100, 200, 60))
+        assert weekly_trend_up(close, 10) is None
+
+    def test_true_on_weekly_uptrend(self):
+        close = self._dated_close(np.linspace(100.0, 300.0, 400))
+        assert weekly_trend_up(close, 10) is True
+
+    def test_false_on_weekly_downtrend(self):
+        close = self._dated_close(np.linspace(300.0, 100.0, 400))
+        assert weekly_trend_up(close, 10) is False
+
+    def test_none_on_short_history(self):
+        close = self._dated_close(np.linspace(100.0, 110.0, 30))
+        assert weekly_trend_up(close, 10) is None

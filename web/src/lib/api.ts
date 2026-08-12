@@ -212,6 +212,44 @@ export interface RotationOverlapPayload {
   candidates: RotationOverlapCandidate[];
 }
 
+export interface SymbolReport {
+  symbol: string;
+  price: number;
+  change_1d: number;
+
+  ema21_rising: boolean | null;
+  ema50_rising: boolean | null;
+  price_vs_sma50: "ustunde" | "altinda" | null;
+  price_vs_sma200: "ustunde" | "altinda" | null;
+  weekly_trend_aligned: boolean | null;
+
+  rsi: number | null;
+  rsi_zone: "asiri_alim" | "asiri_satim" | "notr" | null;
+  stoch_rsi_k: number | null;
+  stoch_rsi_d: number | null;
+  smi: number | null;
+  smi_signal: number | null;
+
+  atr_14: number | null;
+  adr_pct: number | null;
+  range_contraction_pct: number | null;
+  volume_contraction_pct: number | null;
+
+  volume_vs_avg_pct: number | null;
+  obv_trend: "yukselis" | "dusus" | "yatay";
+  cmf: number | null;
+  cmf_signal: "accumulation" | "distribution" | "notr";
+  mfi: number | null;
+
+  pct_from_52w_high: number | null;
+  pct_from_52w_low: number | null;
+
+  matched_long_groups: number[];
+  matched_short_groups: number[];
+
+  summary_tr: string;
+}
+
 export interface MarketEvent {
   when: string;
   kind: "fomc" | "nfp" | "earnings";
@@ -396,6 +434,12 @@ export function getOptionsScan(): Promise<OptionActivity[]> {
 
 export function getNews(symbol: string, lang = "tr"): Promise<NewsItem[]> {
   return apiGet<NewsItem[]>(`/api/news/${encodeURIComponent(symbol)}?lang=${lang}`, 900);
+}
+
+// No revalidateSeconds -- on-demand, one symbol at a time, same pattern as
+// getTradeScan/getVcpScan.
+export function getSymbolReport(symbol: string): Promise<SymbolReport | null> {
+  return apiGet<SymbolReport | null>(`/api/report/${encodeURIComponent(symbol)}`);
 }
 
 // The backend itself only refreshes every ~20min (see the movers-scan cron

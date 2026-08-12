@@ -124,6 +124,17 @@ class TestRouteWiring:
         resp = client.get("/api/options/%3Cscript%3E", headers=AUTH)
         assert resp.status_code == 400
 
+    def test_report_passes_normalized_symbol(self, client, monkeypatch):
+        captured = {}
+        monkeypatch.setattr(api_index.api_data, "report_payload",
+                             lambda sym: captured.setdefault("sym", sym))
+        client.get("/api/report/aapl", headers=AUTH)
+        assert captured["sym"] == "AAPL"
+
+    def test_report_rejects_invalid_symbol(self, client):
+        resp = client.get("/api/report/%3Cscript%3E", headers=AUTH)
+        assert resp.status_code == 400
+
     def test_market_breadth(self, client, monkeypatch):
         monkeypatch.setattr(api_index.api_data, "breadth_payload", lambda: None)
         resp = client.get("/api/market/breadth", headers=AUTH)
