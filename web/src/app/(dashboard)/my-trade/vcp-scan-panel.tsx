@@ -2,6 +2,7 @@
 
 import { useState, useTransition } from "react";
 import type { VcpCandidate } from "@/lib/api";
+import { AiCommentary } from "@/components/ai-commentary";
 import { Panel } from "@/components/panel";
 import { SortableTh } from "@/components/sortable-th";
 import { fmtMoney, fmtPct } from "@/lib/format";
@@ -28,6 +29,7 @@ const ACCESSORS: Record<SortKey, (c: VcpCandidate) => number | string> = {
 export function VcpScanPanel() {
   const [pending, startTransition] = useTransition();
   const [candidates, setCandidates] = useState<VcpCandidate[] | null>(null);
+  const [commentary, setCommentary] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
 
   function handleScan() {
@@ -39,6 +41,7 @@ export function VcpScanPanel() {
         return;
       }
       setCandidates(result.data.candidates);
+      setCommentary(result.data.commentary);
     });
   }
 
@@ -63,6 +66,8 @@ export function VcpScanPanel() {
         </button>
 
         {error && <p className="text-xs text-neg">{error}</p>}
+
+        <AiCommentary text={commentary} />
 
         {candidates !== null && candidates.length === 0 && (
           <p className="text-xs text-text-faint">

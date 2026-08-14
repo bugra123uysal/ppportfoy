@@ -23,7 +23,7 @@ from dataclasses import dataclass
 
 import pandas as pd
 
-from . import config, data, money_flow, trade_scan
+from . import config, data, fibonacci, money_flow, options, trade_scan
 from .indicators import (
     atr,
     average_daily_range_pct,
@@ -43,6 +43,7 @@ from .indicators import (
     weekly_trend_up,
 )
 from .indicators import rsi as rsi_indicator
+from .storage import currency_for
 
 
 @dataclass(frozen=True)
@@ -50,6 +51,7 @@ class SymbolReport:
     symbol: str
     price: float
     change_1d: float
+    currency: str                    # "TRY" | "USD", derived from the symbol suffix
 
     # Trend
     ema21_rising: bool | None
@@ -86,6 +88,8 @@ class SymbolReport:
     # Cross-reference against My Trade's own trade_scan.py groups
     matched_long_groups: list[int]
     matched_short_groups: list[int]
+
+    fib: fibonacci.FibLevels | None
 
     summary_tr: str
 
@@ -204,6 +208,16 @@ def _position_sentence(high52: float | None, low52: float | None) -> str:
     return f"52 haftalık zirveden %{high52:.1f}, dipten %{low52:.1f} uzaklıkta."
 
 
+def _fib_sentence(fib: fibonacci.FibLevels | None) -> str | None:
+    if fib is None:
+        return None
+    side = "üstünde" if fib.pct_to_nearest >= 0 else "altında"
+    return (
+        f"Fibonacci'de fiyat en yakın {fib.nearest_ratio} seviyesinin "
+        f"(%{abs(fib.pct_to_nearest):.1f}) {side} -- {fib.zone_label} bölgesinde."
+    )
+
+
 def _signals_sentence(long_groups: list[int], short_groups: list[int]) -> str:
     if not long_groups and not short_groups:
         return "Şu an My Trade taramasında (trade_scan) eşleşen sinyal yok."
@@ -259,23 +273,30 @@ def score_symbol(symbol: str, df: pd.DataFrame) -> SymbolReport | None:
     long_groups = next((s.groups for s in trade_signals if s.direction == "long"), [])
     short_groups = next((s.groups for s in trade_signals if s.direction == "short"), [])
 
+    fib = fibonacci.build_levels(df, config.FIB_LOOKBACK_DAYS)
+    currency = currency_for(symbol)
+
     summary_tr = " ".join(
-        [
+        sentence
+        for sentence in [
             _trend_sentence(ema21_rising, ema50_rising, weekly_aligned),
             _momentum_sentence(rsi_value, zone),
             _volatility_sentence(range_contraction, volume_contraction),
             _volume_sentence(vs_avg, obv, cmf_state),
             _position_sentence(high52, low52),
+            _fib_sentence(fib),
             _signals_sentence(long_groups, short_groups),
             "Bu bir tahmin değil, göstergelerin şu anki mekanik durumudur -- "
             "yatırım tavsiyesi değildir.",
         ]
+        if sentence
     )
 
     return SymbolReport(
         symbol=symbol,
         price=price,
         change_1d=change_1d,
+        currency=currency,
         ema21_rising=ema21_rising,
         ema50_rising=ema50_rising,
         price_vs_sma50=_price_vs_level(price, sma50),
@@ -300,6 +321,7 @@ def score_symbol(symbol: str, df: pd.DataFrame) -> SymbolReport | None:
         pct_from_52w_low=low52,
         matched_long_groups=long_groups,
         matched_short_groups=short_groups,
+        fib=fib,
         summary_tr=summary_tr,
     )
 
@@ -309,3 +331,58 @@ def build_report(symbol: str) -> SymbolReport | None:
     empty history (bad/delisted ticker)."""
     df = data.get_history(symbol, period=config.DEFAULT_HISTORY_PERIOD)
     return score_symbol(symbol, df)
+
+
+@dataclass(frozen=True)
+class SymbolContext:
+    symbol: str
+    is_us: bool
+
+    put_call_ratio: float | None
+    pcr_mood: str | None            # "bearish" | "bullish" | "neutral" | None
+    option_expiry: str | None
+    call_volume: int | None
+    put_volume: int | None
+
+    institutional_pct: float | None
+    insider_net_pct_6m: float | None
+
+    unavailable_reason: str | None  # "bist" | "no_data" | None
+
+
+def build_symbol_context(symbol: str) -> SymbolContext:
+    """Options put/call ratio + institutional/insider ownership for one
+    symbol -- US-only, since Yahoo carries neither for BIST (.IS) tickers.
+    A BIST symbol short-circuits before touching the network at all: two
+    guaranteed-empty yfinance round trips per request otherwise."""
+    if symbol.upper().endswith(".IS"):
+        return SymbolContext(
+            symbol=symbol,
+            is_us=False,
+            put_call_ratio=None,
+            pcr_mood=None,
+            option_expiry=None,
+            call_volume=None,
+            put_volume=None,
+            institutional_pct=None,
+            insider_net_pct_6m=None,
+            unavailable_reason="bist",
+        )
+
+    activity = data.get_option_activity(symbol)
+    ownership = data.get_ownership_flow(symbol)
+
+    put_call_ratio = activity.put_call_ratio if activity is not None else None
+
+    return SymbolContext(
+        symbol=symbol,
+        is_us=True,
+        put_call_ratio=put_call_ratio,
+        pcr_mood=options.pcr_mood(put_call_ratio) if activity is not None else None,
+        option_expiry=activity.expiry if activity is not None else None,
+        call_volume=activity.call_volume if activity is not None else None,
+        put_volume=activity.put_volume if activity is not None else None,
+        institutional_pct=ownership.institutional_pct if ownership is not None else None,
+        insider_net_pct_6m=ownership.insider_net_pct_6m if ownership is not None else None,
+        unavailable_reason=None if (activity is not None or ownership is not None) else "no_data",
+    )

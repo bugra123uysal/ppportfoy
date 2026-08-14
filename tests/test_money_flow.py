@@ -109,3 +109,32 @@ class TestBuildMoneyFlowScan:
         out = build_money_flow_scan({"AAA": "Enerji"})
         assert out[0].institutional_pct is None
         assert out[0].insider_net_pct_6m is None
+
+    def test_us_symbol_currency_is_usd(self, monkeypatch):
+        df = _frame([100.0] * N)
+        monkeypatch.setattr(
+            money_flow.data, "get_histories", lambda symbols, period=None: {"AAPL": df}
+        )
+        monkeypatch.setattr(money_flow.data, "get_ownership_flow", lambda sym: None)
+        out = build_money_flow_scan({"AAPL": "Teknoloji"})
+        assert out[0].currency == "USD"
+
+    def test_bist_symbol_skips_ownership_call_and_is_try(self, monkeypatch):
+        df = _frame([100.0] * N)
+        monkeypatch.setattr(
+            money_flow.data, "get_histories", lambda symbols, period=None: {"THYAO.IS": df}
+        )
+
+        def _raise_if_called(symbol):
+            raise AssertionError("get_ownership_flow should not be called for a BIST symbol")
+
+        monkeypatch.setattr(money_flow.data, "get_ownership_flow", _raise_if_called)
+
+        out = build_money_flow_scan({"THYAO.IS": "Ulaştırma"})
+        assert len(out) == 1
+        assert out[0].currency == "TRY"
+        assert out[0].institutional_pct is None
+        assert out[0].insider_net_pct_6m is None
+        # CMF/MFI/OBV are pure price/volume math -- still populated for BIST.
+        assert out[0].cmf is not None
+        assert out[0].mfi is not None

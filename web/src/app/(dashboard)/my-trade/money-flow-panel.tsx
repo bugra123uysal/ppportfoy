@@ -2,6 +2,7 @@
 
 import { useState, useTransition } from "react";
 import type { MoneyFlowSignal } from "@/lib/api";
+import { AiCommentary } from "@/components/ai-commentary";
 import { Panel } from "@/components/panel";
 import { SortableTh } from "@/components/sortable-th";
 import { fmtMoney, fmtPct } from "@/lib/format";
@@ -53,6 +54,7 @@ const OBV_CLASS: Record<MoneyFlowSignal["obv_trend"], string> = {
 export function MoneyFlowPanel() {
   const [pending, startTransition] = useTransition();
   const [signals, setSignals] = useState<MoneyFlowSignal[] | null>(null);
+  const [commentary, setCommentary] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
 
   function handleScan() {
@@ -64,6 +66,7 @@ export function MoneyFlowPanel() {
         return;
       }
       setSignals(result.data.signals);
+      setCommentary(result.data.commentary);
     });
   }
 
@@ -86,6 +89,8 @@ export function MoneyFlowPanel() {
         </button>
 
         {error && <p className="text-xs text-neg">{error}</p>}
+
+        <AiCommentary text={commentary} />
 
         {signals !== null && (
           <div className="overflow-x-auto">

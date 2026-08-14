@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { getRotation } from "@/lib/api";
 import type { SectorLeader, SectorRotation } from "@/lib/api";
+import { AiCommentary } from "@/components/ai-commentary";
 import { Panel } from "@/components/panel";
 import { RrgChart } from "@/components/rrg-chart";
 import { fmtPct } from "@/lib/format";
@@ -23,7 +24,7 @@ function currentY(p: SectorRotation): number {
 }
 
 export async function RotationPanel({ includeMine }: { includeMine: boolean }) {
-  const { sectors: points, leaders } = await getRotation(includeMine);
+  const { sectors: points, leaders, commentary } = await getRotation(includeMine);
 
   // Rotation candidates are always sectors, never the user's own holdings --
   // "rotate into" only makes sense between sectors, even when "Holdinglerimi
@@ -100,6 +101,8 @@ export async function RotationPanel({ includeMine }: { includeMine: boolean }) {
                 Şu anda öne çıkan bir rotasyon adayı yok — tüm sektörler zayıflıyor ya da geride.
               </p>
             )}
+
+            <AiCommentary text={commentary} />
 
             <RrgChart points={chartPoints} />
           </div>

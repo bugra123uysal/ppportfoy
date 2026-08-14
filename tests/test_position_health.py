@@ -27,7 +27,7 @@ def _long_signal(groups: list[int]) -> TradeSignal:
 
 def _money_flow(cmf_signal: str) -> MoneyFlowSignal:
     return MoneyFlowSignal(
-        symbol="AAA", sector="", price=100.0, change_1d=0.0, cmf=0.1,
+        symbol="AAA", sector="", price=100.0, change_1d=0.0, currency="USD", cmf=0.1,
         cmf_signal=cmf_signal, mfi=50.0, obv_trend="yatay",
         institutional_pct=None, insider_net_pct_6m=None,
     )

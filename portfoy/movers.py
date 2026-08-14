@@ -38,6 +38,7 @@ from yfinance import EquityQuery
 
 from . import cache, config, data, news
 from .cache import cached
+from .commentary import movers_commentary
 from .serialize import dumps
 from .trade_scan import TradeSignal, scan_symbol
 
@@ -63,6 +64,12 @@ class MoversScan:
     generated_at: str  # ISO timestamp of this scan
     gainers: list[Mover]
     volume_spikes: list[Mover]
+    # Computed once here (not per-request in api_data.py) and persisted with
+    # the rest of the snapshot -- the underlying scan only refreshes every
+    # ~20min via cron, so a fresh Nemotron call on every page read would be
+    # pure waste. Optional/defaulted so existing MoversScan(...) call sites
+    # (tests, mainly) don't need updating.
+    commentary: str | None = None
 
 
 def _safe_number(value: object) -> float | None:
@@ -202,10 +209,13 @@ def build_movers_scan() -> MoversScan:
             raw, signals_by_symbol.get(raw["symbol"], []), news_by_symbol.get(raw["symbol"], [])
         )
 
+    gainers = [to_mover(r) for r in gainers_raw]
+    volume_spikes = [to_mover(r) for r in spikes_raw]
     return MoversScan(
         generated_at=datetime.now(UTC).isoformat(),
-        gainers=[to_mover(r) for r in gainers_raw],
-        volume_spikes=[to_mover(r) for r in spikes_raw],
+        gainers=gainers,
+        volume_spikes=volume_spikes,
+        commentary=movers_commentary(gainers, volume_spikes),
     )
 
 

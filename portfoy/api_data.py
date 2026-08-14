@@ -18,6 +18,14 @@ import pandas as pd
 from . import config, data, performance, risk, storage
 from .breadth import BreadthSnapshot, build_snapshot
 from .calendar_events import MarketEvent, upcoming_events
+from .commentary import (
+    market_pulse_commentary,
+    money_flow_commentary,
+    rotation_commentary,
+    rotation_overlap_commentary,
+    symbol_report_commentary,
+    vcp_commentary,
+)
 from .data import AnalystView
 from .fundamentals import build_fundamental_scan
 from .indicators import last_value, sma
@@ -26,7 +34,7 @@ from .movers import MoversScan, build_movers_scan, load_snapshot
 from .options import OptionActivity, rank_by_volume
 from .performance import SeriesResult
 from .position_health import evaluate_portfolio
-from .report import SymbolReport, build_report
+from .report import SymbolContext, SymbolReport, build_report, build_symbol_context
 from .risk import PositionMetrics
 from .rotation import build_rotation, build_sector_leaders
 from .rotation_overlap import build_rotation_overlap
@@ -102,10 +110,18 @@ def rotation_payload(include_mine: bool = False) -> dict:
         labels.update({sym: ("Portföyüm", "My holding") for sym in mine})
     closes = data.get_weekly_closes(tuple(dict.fromkeys([*symbols, *leader_symbols])))
     if closes.empty:
-        return {"sectors": [], "leaders": {}}
+        return {"sectors": [], "leaders": {}, "commentary": None}
     sectors = build_rotation(closes, labels, reference=list(config.SECTOR_ETFS))
     leaders = build_sector_leaders(closes, config.SECTOR_LEADER_STOCKS)
-    return {"sectors": sectors, "leaders": leaders}
+    # Commentary reads only the actual sector ETFs -- when include_mine=True,
+    # `sectors` also carries the user's own individual holdings, which would
+    # read like extra sectors to the model.
+    etf_sectors = [s for s in sectors if s.symbol in config.SECTOR_ETFS]
+    return {
+        "sectors": sectors,
+        "leaders": leaders,
+        "commentary": rotation_commentary(etf_sectors),
+    }
 
 
 def _sector_leader_universe() -> dict[str, str]:
@@ -121,8 +137,27 @@ def trade_scan_payload() -> dict:
     return {"signals": build_trade_scan(_sector_leader_universe())}
 
 
-def money_flow_payload() -> dict:
-    return {"signals": build_money_flow_scan(_sector_leader_universe())}
+def _portfolio_universe() -> dict[str, str]:
+    """Portfolio holdings -> the generic "Portföyüm" bucket, always -- even
+    when a holding is also a sector leader. money_flow_payload's scope="both"
+    merge relies on this label winning over the sector-leader one on
+    collision ("this is mine" beats the generic sector tag)."""
+    return {p.symbol: "Portföyüm" for p in storage.load_portfolio()}
+
+
+def money_flow_payload(scope: str = config.DEFAULT_MONEY_FLOW_SCOPE) -> dict:
+    if scope == "portfolio":
+        universe = _portfolio_universe()
+    elif scope == "universe":
+        universe = _sector_leader_universe()
+    else:
+        # Portfolio labels win when a holding is also a sector leader --
+        # "this is mine" is the more useful read than the generic sector tag.
+        universe = {**_sector_leader_universe(), **_portfolio_universe()}
+    if not universe:
+        return {"signals": [], "commentary": None}
+    signals = build_money_flow_scan(universe)
+    return {"signals": signals, "commentary": money_flow_commentary(signals)}
 
 
 def fundamental_scan_payload() -> dict:
@@ -130,7 +165,8 @@ def fundamental_scan_payload() -> dict:
 
 
 def vcp_scan_payload() -> dict:
-    return {"candidates": build_vcp_scan(_sector_leader_universe())}
+    candidates = build_vcp_scan(_sector_leader_universe())
+    return {"candidates": candidates, "commentary": vcp_commentary(candidates)}
 
 
 def rotation_overlap_payload() -> dict:
@@ -143,7 +179,7 @@ def rotation_overlap_payload() -> dict:
     symbols, leader_symbols = _sector_and_leader_symbols()
     closes = data.get_weekly_closes(tuple(dict.fromkeys([*symbols, *leader_symbols])))
     if closes.empty:
-        return {"candidates": []}
+        return {"candidates": [], "commentary": None}
     sectors = build_rotation(closes, dict(config.SECTOR_ETFS), reference=list(config.SECTOR_ETFS))
     leaders = build_sector_leaders(closes, config.SECTOR_LEADER_STOCKS)
 
@@ -155,7 +191,7 @@ def rotation_overlap_payload() -> dict:
         build_vcp_scan(universe),
         build_money_flow_scan(universe),
     )
-    return {"candidates": candidates}
+    return {"candidates": candidates, "commentary": rotation_overlap_commentary(candidates)}
 
 
 def option_activity_payload(symbol: str) -> OptionActivity | None:
@@ -226,6 +262,21 @@ def macro_payload() -> list[dict]:
     return data.get_macro_snapshot()
 
 
+def market_pulse_payload() -> dict:
+    """Piyasa Pusulası's headline AI digest -- reuses the same breadth/
+    sentiment/yield-curve/macro payload functions the page's other panels
+    already call, so this makes no extra network round trip beyond what
+    those functions themselves need (each is independently cached, see
+    config.py's *_CACHE_TTL constants)."""
+    breadth = breadth_payload()
+    sentiment = sentiment_payload()
+    yield_curve = yield_curve_payload()
+    macro = macro_payload()
+    return {
+        "commentary": market_pulse_commentary(breadth, sentiment, yield_curve, macro),
+    }
+
+
 def calendar_payload(days: int = config.CALENDAR_LOOKAHEAD_DAYS) -> list[MarketEvent]:
     positions = storage.load_portfolio()
     earnings = {
@@ -244,8 +295,11 @@ def movers_payload() -> dict | MoversScan:
     return snapshot if snapshot is not None else build_movers_scan()
 
 
-def report_payload(symbol: str) -> SymbolReport | None:
-    return build_report(symbol)
+def report_payload(symbol: str) -> dict[str, SymbolReport | SymbolContext | str | None]:
+    report = build_report(symbol)
+    context = build_symbol_context(symbol) if report is not None else None
+    commentary = symbol_report_commentary(report, context) if report is not None else None
+    return {"report": report, "context": context, "commentary": commentary}
 
 
 def news_payload(symbol: str, lang: str = "tr") -> list[dict]:

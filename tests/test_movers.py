@@ -318,6 +318,29 @@ class TestBuildMoversScan:
         assert scan.gainers == []
         assert scan.volume_spikes == []
 
+    def test_commentary_is_computed_once_from_the_final_gainers_and_spikes(self, monkeypatch):
+        monkeypatch.setattr(
+            movers, "_fetch_day_gainers", lambda: [_parse_quote(_quote(symbol="AAA"))]
+        )
+        monkeypatch.setattr(
+            movers, "_fetch_volume_spikes", lambda: [_parse_quote(_quote(symbol="BBB"))]
+        )
+        monkeypatch.setattr(movers.data, "get_histories", lambda symbols, period=None: {})
+        monkeypatch.setattr(movers.news, "get_news_for", lambda sym, lang: [])
+        captured = {}
+        monkeypatch.setattr(
+            movers, "movers_commentary",
+            lambda gainers, volume_spikes: captured.update(
+                gainers=gainers, volume_spikes=volume_spikes
+            ) or "yorum",
+        )
+
+        scan = build_movers_scan()
+
+        assert scan.commentary == "yorum"
+        assert captured["gainers"] == scan.gainers
+        assert captured["volume_spikes"] == scan.volume_spikes
+
 
 class TestSnapshotPersistence:
     def test_save_is_noop_without_backend(self, monkeypatch):

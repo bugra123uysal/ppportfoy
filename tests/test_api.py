@@ -135,6 +135,36 @@ class TestRouteWiring:
         resp = client.get("/api/report/%3Cscript%3E", headers=AUTH)
         assert resp.status_code == 400
 
+    def test_report_response_has_report_and_context_keys(self, client, monkeypatch):
+        monkeypatch.setattr(
+            api_index.api_data, "report_payload",
+            lambda sym: {"report": None, "context": None},
+        )
+        resp = client.get("/api/report/AAPL", headers=AUTH)
+        body = resp.get_json()
+        assert "report" in body
+        assert "context" in body
+
+    def test_money_flow_defaults_to_universe_scope(self, client, monkeypatch):
+        captured = {}
+        monkeypatch.setattr(
+            api_index.api_data, "money_flow_payload",
+            lambda scope: captured.update(scope=scope) or {"signals": []},
+        )
+        client.get("/api/money-flow", headers=AUTH)
+        from portfoy import config
+        assert captured == {"scope": config.DEFAULT_MONEY_FLOW_SCOPE}
+
+    def test_money_flow_accepts_valid_scopes(self, client, monkeypatch):
+        monkeypatch.setattr(api_index.api_data, "money_flow_payload", lambda scope: {"signals": []})
+        for scope in ("universe", "portfolio", "both"):
+            resp = client.get(f"/api/money-flow?scope={scope}", headers=AUTH)
+            assert resp.status_code == 200
+
+    def test_money_flow_rejects_unknown_scope(self, client):
+        resp = client.get("/api/money-flow?scope=bogus", headers=AUTH)
+        assert resp.status_code == 400
+
     def test_market_breadth(self, client, monkeypatch):
         monkeypatch.setattr(api_index.api_data, "breadth_payload", lambda: None)
         resp = client.get("/api/market/breadth", headers=AUTH)

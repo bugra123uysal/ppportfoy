@@ -6,6 +6,7 @@ import { SentimentPanel } from "./sentiment-panel";
 import { RotationPanel } from "./rotation-panel";
 import { OptionsPanel } from "./options-panel";
 import { CalendarPanel } from "./calendar-panel";
+import { MarketPulsePanel } from "./market-pulse-panel";
 
 // Each panel below fetches and awaits its own data independently inside its
 // own Suspense boundary, instead of one page-level Promise.all -- a panel
@@ -29,6 +30,10 @@ export default async function MarketCompassPage({
           opsiyon konumlanması ve takvim, tek sayfada.
         </p>
       </div>
+
+      <Suspense fallback={<PanelSkeleton />}>
+        <MarketPulsePanel />
+      </Suspense>
 
       <Suspense fallback={<PanelSkeleton />}>
         <BreadthPanel />

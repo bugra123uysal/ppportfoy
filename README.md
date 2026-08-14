@@ -85,6 +85,7 @@ portfoy/                # Paylaşılan Python çekirdeği (hem api/ hem testler 
 ├── sentiment.py        # korku/iştah bileşik skoru (saf)
 ├── calendar_events.py  # FOMC/NFP/bilanço takvimi (saf)
 ├── news.py             # Yahoo + Google News RSS
+├── commentary.py       # Nemotron AI eğitici yorum katmanı (opsiyonel, NVIDIA_API_KEY gerekir)
 └── api_data.py         # api/index.py'nin çağırdığı, saf dataclass/dict döndüren katman
 ```
 
@@ -95,7 +96,7 @@ portfoy/                # Paylaşılan Python çekirdeği (hem api/ hem testler 
 ```bash
 # 1) Flask API
 pip install -r requirements.txt
-PORTFOY_API_KEY=devkey python -c "from api.index import app; app.run(host='127.0.0.1', port=5001)"
+PORTFOY_API_KEY=devkey NVIDIA_API_KEY=your-nvapi-key python -c "from api.index import app; app.run(host='127.0.0.1', port=5001)"
 
 # 2) Next.js web
 cd web
@@ -135,6 +136,26 @@ planında native Cron Jobs günde 2 kere ile sınırlı, gün içi tarama için 
 
 Yerel geliştirmede bu adım gerekmez: `/api/movers` her istekte taze hesaplanır (Upstash yoksa
 kalıcı önbellek de yok).
+
+### Nemotron AI Yorumu (eğitici katman) kurulumu
+
+Hisse Raporu, Sermaye Akışı, VCP, Rotasyon, Rotasyon+My Trade Kesişimi, Günün Hareketlileri ve
+Piyasa Pusulası'ndaki "Eğitici Yorum · Nemotron AI" kutuları, NVIDIA'nın ücretsiz NIM API'sini
+kullanır (`portfoy/commentary.py`) — zaten hesaplanmış göstergeleri Türkçe olarak "ne oldu / neden
+/ genel ders" formatında anlatan, tamamen opsiyonel bir katman. Kurulmazsa uygulama normal
+çalışmaya devam eder, sadece bu kutular görünmez.
+
+1. https://build.nvidia.com adresinde ücretsiz bir hesap oluştur (kredi kartı istenmez).
+2. Herhangi bir modelin sayfasında **API Keys → Generate API Key** ile bir `nvapi-...` anahtarı al.
+3. `NVIDIA_API_KEY` environment variable'ını ayarla:
+   - Yerel: Flask API'yi başlatırken yukarıdaki gibi `NVIDIA_API_KEY=nvapi-...` ekle.
+   - Production (Vercel): `api` servisine proje environment variable olarak ekle.
+
+Rate limit hesap+model başına ~40 istek/dk (NVIDIA'nın kendi belirttiği bir SLA değil, topluluk
+gözlemi) — bu katman her paneli iki modelden biriyle çağırır: çoğu panel `nemotron-3-super`,
+Hisse Raporu'nun derin analizi `nemotron-3-ultra-550b-a55b` (bkz. `config.py`'deki
+`NEMOTRON_*` sabitleri). Nemotron 3'ün resmi desteklenen dil listesi Türkçe içermiyor — çalışır,
+ama üretilen metnin kalitesini kurulumdan sonra gözden geçir.
 
 ## Testler
 

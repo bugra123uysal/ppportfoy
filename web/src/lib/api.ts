@@ -128,6 +128,7 @@ export interface SectorLeader {
 export interface RotationPayload {
   sectors: SectorRotation[];
   leaders: Record<string, SectorLeader[]>;
+  commentary: string | null;
 }
 
 export interface TradeSignal {
@@ -163,6 +164,7 @@ export interface MoneyFlowSignal {
 
 export interface MoneyFlowPayload {
   signals: MoneyFlowSignal[];
+  commentary: string | null;
 }
 
 export interface FundamentalSnapshot {
@@ -199,6 +201,7 @@ export interface VcpCandidate {
 
 export interface VcpScanPayload {
   candidates: VcpCandidate[];
+  commentary: string | null;
 }
 
 export interface RotationOverlapCandidate {
@@ -210,12 +213,36 @@ export interface RotationOverlapCandidate {
 
 export interface RotationOverlapPayload {
   candidates: RotationOverlapCandidate[];
+  commentary: string | null;
+}
+
+export interface FibLevel {
+  ratio: number;
+  price: number;
+  kind: "retracement" | "extension";
+  label: string;
+}
+
+export interface FibLevels {
+  swing_high: number;
+  swing_low: number;
+  swing_high_date: string;
+  swing_low_date: string;
+  direction: "yukselis" | "dusus";
+  lookback_days: number;
+  levels: FibLevel[];
+  nearest_ratio: number;
+  nearest_price: number;
+  pct_to_nearest: number;
+  at_level: boolean;
+  zone_label: string;
 }
 
 export interface SymbolReport {
   symbol: string;
   price: number;
   change_1d: number;
+  currency: "TRY" | "USD";
 
   ema21_rising: boolean | null;
   ema50_rising: boolean | null;
@@ -247,7 +274,35 @@ export interface SymbolReport {
   matched_long_groups: number[];
   matched_short_groups: number[];
 
+  fib: FibLevels | null;
+
   summary_tr: string;
+}
+
+export interface SymbolContext {
+  symbol: string;
+  is_us: boolean;
+
+  put_call_ratio: number | null;
+  pcr_mood: "bearish" | "bullish" | "neutral" | null;
+  option_expiry: string | null;
+  call_volume: number | null;
+  put_volume: number | null;
+
+  institutional_pct: number | null;
+  insider_net_pct_6m: number | null;
+
+  unavailable_reason: "bist" | "no_data" | null;
+}
+
+export interface SymbolReportPayload {
+  report: SymbolReport | null;
+  context: SymbolContext | null;
+  commentary: string | null;
+}
+
+export interface MarketPulse {
+  commentary: string | null;
 }
 
 export interface MarketEvent {
@@ -290,6 +345,7 @@ export interface MoversScan {
   generated_at: string;
   gainers: Mover[];
   volume_spikes: Mover[];
+  commentary: string | null;
 }
 
 export interface NewsItem {
@@ -387,6 +443,12 @@ export function getYieldCurve(): Promise<YieldCurveSnapshot> {
   return apiGet<YieldCurveSnapshot>("/api/market/yield-curve", 1800);
 }
 
+// Same 1800s window as breadth/yield-curve -- market_pulse_payload just
+// narrates those same cached reads, so it can't be fresher than they are.
+export function getMarketPulse(): Promise<MarketPulse> {
+  return apiGet<MarketPulse>("/api/market/pulse", 1800);
+}
+
 export function getAnalystViews(): Promise<Record<string, AnalystView>> {
   return apiGet<Record<string, AnalystView>>("/api/analyst", 21600);
 }
@@ -438,8 +500,8 @@ export function getNews(symbol: string, lang = "tr"): Promise<NewsItem[]> {
 
 // No revalidateSeconds -- on-demand, one symbol at a time, same pattern as
 // getTradeScan/getVcpScan.
-export function getSymbolReport(symbol: string): Promise<SymbolReport | null> {
-  return apiGet<SymbolReport | null>(`/api/report/${encodeURIComponent(symbol)}`);
+export function getSymbolReport(symbol: string): Promise<SymbolReportPayload> {
+  return apiGet<SymbolReportPayload>(`/api/report/${encodeURIComponent(symbol)}`);
 }
 
 // The backend itself only refreshes every ~20min (see the movers-scan cron

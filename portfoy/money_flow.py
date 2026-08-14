@@ -21,6 +21,7 @@ import pandas as pd
 
 from . import config, data
 from .indicators import chaikin_money_flow, money_flow_index, on_balance_volume, pct_change_last
+from .storage import currency_for
 
 
 @dataclass(frozen=True)
@@ -29,6 +30,7 @@ class MoneyFlowSignal:
     sector: str
     price: float
     change_1d: float
+    currency: str
     cmf: float | None
     cmf_signal: str              # "accumulation" | "distribution" | "notr"
     mfi: float | None
@@ -77,13 +79,16 @@ def scan_symbol(symbol: str, sector: str, df: pd.DataFrame) -> MoneyFlowSignal |
 
     cmf_last = None if cmf.empty or pd.isna(cmf.iloc[-1]) else float(cmf.iloc[-1])
     mfi_last = None if mfi.empty or pd.isna(mfi.iloc[-1]) else float(mfi.iloc[-1])
-    ownership = data.get_ownership_flow(symbol)
+    # Yahoo has no Holders-tab data for BIST tickers -- skip the guaranteed-
+    # empty round trip rather than fetch-and-discard.
+    ownership = None if symbol.upper().endswith(".IS") else data.get_ownership_flow(symbol)
 
     return MoneyFlowSignal(
         symbol=symbol,
         sector=sector,
         price=float(df["Close"].iloc[-1]),
         change_1d=pct_change_last(df["Close"]),
+        currency=currency_for(symbol),
         cmf=cmf_last,
         cmf_signal=cmf_signal(cmf_last),
         mfi=mfi_last,

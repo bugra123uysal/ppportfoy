@@ -2,6 +2,7 @@
 
 import { useState, useTransition } from "react";
 import type { RotationOverlapCandidate } from "@/lib/api";
+import { AiCommentary } from "@/components/ai-commentary";
 import { Panel } from "@/components/panel";
 import { SortableTh } from "@/components/sortable-th";
 import { fmtPct } from "@/lib/format";
@@ -32,6 +33,7 @@ const SIGNAL_COLOR: Record<string, string> = {
 export function RotationOverlapPanel() {
   const [pending, startTransition] = useTransition();
   const [candidates, setCandidates] = useState<RotationOverlapCandidate[] | null>(null);
+  const [commentary, setCommentary] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
 
   function handleScan() {
@@ -43,6 +45,7 @@ export function RotationOverlapPanel() {
         return;
       }
       setCandidates(result.data.candidates);
+      setCommentary(result.data.commentary);
     });
   }
 
@@ -67,6 +70,8 @@ export function RotationOverlapPanel() {
         </button>
 
         {error && <p className="text-xs text-neg">{error}</p>}
+
+        <AiCommentary text={commentary} />
 
         {candidates !== null && candidates.length === 0 && (
           <p className="text-xs text-text-faint">

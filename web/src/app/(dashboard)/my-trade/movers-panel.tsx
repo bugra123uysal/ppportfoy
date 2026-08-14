@@ -1,5 +1,6 @@
 import { getMovers } from "@/lib/api";
 import type { Mover, NewsItem } from "@/lib/api";
+import { AiCommentary } from "@/components/ai-commentary";
 import { Panel } from "@/components/panel";
 import { fmtMoney, fmtPct, fmtCompact, timeAgo } from "@/lib/format";
 
@@ -33,6 +34,8 @@ export async function MoversPanel() {
       subtitle={`ABD piyasası — arka planda periyodik taranır (~20 dk), bilgi amaçlıdır, yatırım tavsiyesi değildir. ${freshnessLabel(scan.generated_at)}.`}
     >
       <div className="flex flex-col gap-6">
+        <AiCommentary text={scan.commentary} />
+
         <MoversTable
           title="En Çok Yükselenler"
           description="Yahoo'nun günlük sıralaması — zaten hareket etmiş isimler, geriye dönük bir liste."

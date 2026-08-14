@@ -148,7 +148,10 @@ def trade_scan() -> Response:
 
 @app.get("/api/money-flow")
 def money_flow() -> Response:
-    return _json_response(api_data.money_flow_payload())
+    scope = request.args.get("scope", config.DEFAULT_MONEY_FLOW_SCOPE)
+    if scope not in config.MONEY_FLOW_SCOPES:
+        raise _bad_request(f"unknown scope: {scope!r}")
+    return _json_response(api_data.money_flow_payload(scope))
 
 
 @app.get("/api/fundamentals")
@@ -199,6 +202,11 @@ def market_macro() -> Response:
 @app.get("/api/market/yield-curve")
 def market_yield_curve() -> Response:
     return _json_response(api_data.yield_curve_payload())
+
+
+@app.get("/api/market/pulse")
+def market_pulse() -> Response:
+    return _json_response(api_data.market_pulse_payload())
 
 
 @app.get("/api/analyst")

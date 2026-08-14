@@ -61,6 +61,7 @@ def _money_flow_signal(symbol: str, cmf_signal: str = "accumulation") -> MoneyFl
         sector="Enerji",
         price=100.0,
         change_1d=1.0,
+        currency="USD",
         cmf=0.2,
         cmf_signal=cmf_signal,
         mfi=55.0,

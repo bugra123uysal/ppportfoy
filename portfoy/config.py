@@ -54,6 +54,16 @@ VIX_WARN = 25.0
 VIX_CRIT = 32.0
 EARNINGS_SOON_DAYS = 7
 
+# --- Hisse Raporu: Fibonacci -----------------------------------------------
+# Retracement/extension levels off the highest High / lowest Low in the
+# trailing window -- see portfoy/fibonacci.py. 120 sessions (~6 months) is
+# long enough to catch a real swing without drifting into stale, no-longer-
+# relevant price history.
+FIB_LOOKBACK_DAYS = 120
+FIB_RETRACEMENT_RATIOS = (0.236, 0.382, 0.5, 0.618, 0.786)
+FIB_EXTENSION_RATIOS = (1.272, 1.618)
+FIB_NEAR_LEVEL_PCT = 1.5     # within this % of a level counts as "at" it
+
 # --- Options radar ---------------------------------------------------------
 # Most liquid US option names; the user's own US holdings are added on top.
 # BIST stocks have no option chains on Yahoo, so only US symbols are scanned.
@@ -293,4 +303,18 @@ COMPARE_PERIODS = {
 }
 DEFAULT_COMPARE_PERIOD = "per_3m"
 COMPARE_HISTORY_PERIOD = "2y"
+# --- Nemotron AI commentary --------------------------------------------
+# Free NIM API (build.nvidia.com), OpenAI-compatible -- see
+# portfoy/commentary.py's module docstring for the full design. Requires an
+# NVIDIA_API_KEY env var; every caller degrades to no commentary without it.
+NEMOTRON_API_BASE = "https://integrate.api.nvidia.com/v1"
+NEMOTRON_SUPER_MODEL = "nvidia/nemotron-3-super-120b-a12b"  # most panels
+NEMOTRON_ULTRA_MODEL = "nvidia/nemotron-3-ultra-550b-a55b"  # Hisse Raporu only
+NEMOTRON_TIMEOUT = 20  # seconds -- LLM calls run well past REQUEST_TIMEOUT
+
+MONEY_FLOW_SCOPES = {"universe", "portfolio", "both"}
+# "universe" (not "both") on purpose: the unscoped call must stay side-effect
+# identical to before this scope param existed -- no surprise read of the
+# user's real portfolio file for existing/implicit callers.
+DEFAULT_MONEY_FLOW_SCOPE = "universe"
 ROTATION_CACHE_TTL = 3600    # seconds; weekly data barely moves intraday

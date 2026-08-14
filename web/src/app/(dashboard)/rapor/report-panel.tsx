@@ -60,7 +60,7 @@ export function ReportPanel({ report: r }: { report: SymbolReport }) {
       <div className="flex flex-col gap-6">
         <div className="flex items-baseline gap-3">
           <span className="text-2xl font-semibold tabular text-text">
-            {fmtMoney(r.price, "USD")}
+            {fmtMoney(r.price, r.currency)}
           </span>
           <span className={`tabular text-sm font-medium ${r.change_1d >= 0 ? "text-pos" : "text-neg"}`}>
             {fmtPct(r.change_1d, 2)}
