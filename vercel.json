@@ -8,7 +8,7 @@
     },
     "api": {
       "root": ".",
-      "entrypoint": "api/index:app"
+      "entrypoint": "api.index:app"
     }
   },
   "rewrites": [
