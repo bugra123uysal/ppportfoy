@@ -204,6 +204,34 @@ export interface VcpScanPayload {
   commentary: string | null;
 }
 
+export interface TrendCandidate {
+  symbol: string;
+  sector: string;
+  price: number;
+  change_1d: number;
+  direction: "boga" | "ayi";
+  score: number;
+  strength: "guclu" | "olusuyor" | "erken";
+  ma_trend_confirmed: boolean;
+  trendline_confirmed: boolean | null;
+  structural_stop: number | null;
+  volume_confirmed: boolean;
+  money_flow_signal: "accumulation" | "distribution" | "notr";
+  money_flow_aligned: boolean;
+  adx: number | null;
+  adx_rising: boolean | null;
+  trend_maturity: "zayif" | "saglikli" | "tukenebilir" | "belirsiz";
+  rsi_divergence_warning: boolean;
+  trend_age_days: number;
+  newly_triggered: boolean;
+}
+
+export interface TrendScanPayload {
+  sectors: TrendCandidate[];
+  stocks: TrendCandidate[];
+  commentary: string | null;
+}
+
 export interface RotationOverlapCandidate {
   symbol: string;
   sector: string;
@@ -484,6 +512,13 @@ export function getVcpScan(): Promise<VcpScanPayload> {
 // is button-triggered like the other My Trade panels, not page-load.
 export function getRotationOverlap(): Promise<RotationOverlapPayload> {
   return apiGet<RotationOverlapPayload>("/api/rotation-overlap");
+}
+
+// No revalidateSeconds: same on-demand-scan pattern as VCP/trade-scan --
+// full-universe 1y history fetch + swing-point detection per symbol is too
+// slow to run on every page load, so this is button-triggered.
+export function getTrendScan(): Promise<TrendScanPayload> {
+  return apiGet<TrendScanPayload>("/api/trend-scan");
 }
 
 export function getCalendar(days = 45): Promise<MarketEvent[]> {

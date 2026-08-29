@@ -272,6 +272,34 @@ VCP_EMA_FAST = 10
 VCP_EMA_SLOW = 20
 VCP_NEAR_52W_HIGH_MAX_PCT = -15.0          # 52 haftalık zirveden en fazla bu kadar uzak olabilir
 
+# --- Trend Bulucu: market yapısı + MA rejimi + trendline taraması ----------
+# "Trend Nasıl Yakalanır?" (bkz. Desktop/aa/video özeti.txt) videosunun 3
+# bölümünü mekanik bir tarama kuralına çevirir -- bkz. portfoy/trend_scan.py:
+#   1) Market Yapısı  -- swing HH+HL (boğa) / LH+LL (ayı), sert filtre.
+#   2) MA rejimi      -- fiyat + hızlı EMA, yavaş SMA'nın hangi tarafında
+#      (Golden/Death Cross rejimi), skora katkı.
+#   3) Trendline       -- son swing noktalarından geçen regresyon çizgisi
+#      kırılmamış mı, skora katkı.
+# Aynı SECTOR_LEADER_STOCKS evrenini (hisseler) ve SECTOR_ETFS'i (sektörler,
+# aynı yöntemle) kullanır -- "hangi sektör trendde" ile "hangi hisse trendde"
+# aynı tanımı paylaşsın diye.
+TREND_HISTORY_PERIOD = "1y"
+TREND_SWING_WINDOW = 3           # fraktal swing yarı-penceresi (her iki yanda bu kadar bar)
+TREND_TRENDLINE_POINTS = 4       # trendline regresyonunda kullanılan en fazla swing noktası sayısı
+TREND_MA_FAST = 21               # video: Nasdaq gibi piyasalarda 21/50 günlük daha iyi çalışabilir
+TREND_MA_SLOW = 50               # video: fiyatın 50 günlük MA'ya göre konumu trend yönünü gösterir
+
+# Ek teyit sinyalleri (skoru değiştirmez, bağımsız bilgi katmanlarıdır):
+TREND_VOLUME_SMA_PERIOD = 20     # money_flow.py'nin CMF_PERIOD'uyla aynı pencere
+TREND_VOLUME_RECENT_DAYS = 5     # son bu kadar günün ort. hacmi, 20g ortalamayı geçiyor mu
+# ADX/RSI period'u için ayrı sabit tanımlamıyoruz -- config.ATR_PERIOD ve
+# config.RSI_PERIOD zaten 14, aynı Wilder-period konvansiyonunu paylaşıyor.
+TREND_ADX_RISING_LOOKBACK = 5      # ADX bu kadar gün önceye göre yükseliyor mu
+TREND_ADX_TREND_THRESHOLD = 25.0   # altı: yapı var ama ADX henüz trendi teyit etmiyor ("zayıf")
+TREND_ADX_MATURE_THRESHOLD = 40.0  # üstü + düşüyorsa "tükenebilir" uyarısı (araştırma: ADX zirve
+                                    # yapıp dönmesi genelde trendin en olgun/tükenmiş noktası)
+TREND_FRESH_MAX_AGE_DAYS = 10      # onaylayan bacak bu kadar gün içinde başladıysa "yeni"
+
 # --- Risk & Uyarılar: pozisyon sağlığı --------------------------------------
 # Applies the same technical/money-flow/fundamental reads My Trade's scanners
 # use to the user's own holdings instead of the fixed sector-leader universe

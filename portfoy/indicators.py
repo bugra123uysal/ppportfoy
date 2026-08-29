@@ -31,6 +31,42 @@ def atr(high: pd.Series, low: pd.Series, close: pd.Series, period: int = 14) -> 
     return tr.ewm(alpha=1.0 / period, min_periods=period, adjust=False).mean()
 
 
+def adx(
+    high: pd.Series, low: pd.Series, close: pd.Series, period: int = 14
+) -> tuple[pd.Series, pd.Series, pd.Series]:
+    """Average Directional Index (Wilder), plus its +DI/-DI inputs.
+
+    ADX measures trend STRENGTH regardless of direction (rising = the trend
+    is gaining conviction, falling = it's fading -- see trend_scan.py's
+    "olgunluk" read, which treats a high-but-falling ADX as the trend's most
+    exhausted point, not its healthiest). +DI/-DI say which side currently
+    dominates. Same Wilder ewm(alpha=1/period) smoothing convention as
+    ``rsi``/``atr`` above.
+    """
+    up_move = high.diff()
+    down_move = -low.diff()
+    plus_dm = pd.Series(
+        np.where((up_move > down_move) & (up_move > 0), up_move, 0.0), index=high.index
+    )
+    minus_dm = pd.Series(
+        np.where((down_move > up_move) & (down_move > 0), down_move, 0.0), index=high.index
+    )
+
+    prev_close = close.shift(1)
+    tr = pd.concat(
+        [high - low, (high - prev_close).abs(), (low - prev_close).abs()], axis=1
+    ).max(axis=1)
+    tr_smooth = tr.ewm(alpha=1.0 / period, min_periods=period, adjust=False).mean()
+    plus_dm_smooth = plus_dm.ewm(alpha=1.0 / period, min_periods=period, adjust=False).mean()
+    minus_dm_smooth = minus_dm.ewm(alpha=1.0 / period, min_periods=period, adjust=False).mean()
+
+    plus_di = 100.0 * plus_dm_smooth / tr_smooth.replace(0.0, np.nan)
+    minus_di = 100.0 * minus_dm_smooth / tr_smooth.replace(0.0, np.nan)
+    dx = 100.0 * (plus_di - minus_di).abs() / (plus_di + minus_di).replace(0.0, np.nan)
+    adx_line = dx.ewm(alpha=1.0 / period, min_periods=period, adjust=False).mean()
+    return adx_line, plus_di, minus_di
+
+
 def pct_change_last(close: pd.Series) -> float:
     """Last close vs previous close, in percent. NaN-safe."""
     clean = close.dropna()
@@ -253,6 +289,23 @@ def weekly_trend_up(close: pd.Series, ema_period: int) -> bool | None:
     if weekly_ema.iloc[-6:].isna().any():
         return None
     return bool(weekly_ema.iloc[-1] > weekly_ema.iloc[-6])
+
+
+def swing_highs(high: pd.Series, window: int = 3) -> pd.Series:
+    """Boolean mask marking fractal swing highs -- a bar whose High is the
+    strict max within a `window`-bar neighborhood on each side (Dow Theory /
+    market-structure pivot detection, see trend_scan.py). Edge bars without a
+    full neighborhood on both sides can never qualify."""
+    span = 2 * window + 1
+    rolling_max = high.rolling(window=span, center=True, min_periods=span).max()
+    return high == rolling_max
+
+
+def swing_lows(low: pd.Series, window: int = 3) -> pd.Series:
+    """Mirror of swing_highs for troughs."""
+    span = 2 * window + 1
+    rolling_min = low.rolling(window=span, center=True, min_periods=span).min()
+    return low == rolling_min
 
 
 def ut_bot_trailing_stop(

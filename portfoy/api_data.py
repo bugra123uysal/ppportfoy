@@ -24,6 +24,7 @@ from .commentary import (
     rotation_commentary,
     rotation_overlap_commentary,
     symbol_report_commentary,
+    trend_commentary,
     vcp_commentary,
 )
 from .data import AnalystView
@@ -40,6 +41,7 @@ from .rotation import build_rotation, build_sector_leaders
 from .rotation_overlap import build_rotation_overlap
 from .sentiment import SentimentScore, build_score
 from .trade_scan import build_trade_scan
+from .trend_scan import build_trend_scan
 from .vcp_scan import build_vcp_scan
 from .yield_curve import YieldCurveSnapshot, build_yield_curve_snapshot, credit_spread_proxy_change
 
@@ -135,6 +137,24 @@ def _sector_leader_universe() -> dict[str, str]:
 
 def trade_scan_payload() -> dict:
     return {"signals": build_trade_scan(_sector_leader_universe())}
+
+
+def _sector_etf_universe() -> dict[str, str]:
+    """SECTOR_ETFS flattened to ticker -> Turkish label -- lets
+    trend_scan_payload apply the identical market-structure scan to the
+    sector ETFs themselves, so "hangi sektör trendde" uses the same
+    definition as "hangi hisse trendde" instead of a second methodology."""
+    return {etf: label_tr for etf, (label_tr, _label_en) in config.SECTOR_ETFS.items()}
+
+
+def trend_scan_payload() -> dict:
+    sectors = build_trend_scan(_sector_etf_universe())
+    stocks = build_trend_scan(_sector_leader_universe())
+    return {
+        "sectors": sectors,
+        "stocks": stocks,
+        "commentary": trend_commentary(sectors, stocks),
+    }
 
 
 def _portfolio_universe() -> dict[str, str]:

@@ -11,6 +11,7 @@ export const NAV_ITEMS: NavItem[] = [
   { href: "/risk", label: "Risk & Uyarılar", glyph: "▲" },
   { href: "/karsilastirma", label: "Getiri Karşılaştırma", glyph: "∿" },
   { href: "/my-trade", label: "My Trade", glyph: "⚡" },
+  { href: "/trend", label: "Trend Bulucu", glyph: "↗" },
   { href: "/rapor", label: "Hisse Raporu", glyph: "▣" },
   { href: "/haberler", label: "Haberler", glyph: "▦" },
 ];

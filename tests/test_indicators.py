@@ -3,6 +3,7 @@ import pandas as pd
 import pytest
 
 from portfoy.indicators import (
+    adx,
     atr,
     average_daily_range_pct,
     bollinger_bands,
@@ -22,6 +23,8 @@ from portfoy.indicators import (
     sma,
     stochastic_momentum_index,
     stochastic_rsi,
+    swing_highs,
+    swing_lows,
     ut_bot_trailing_stop,
     volume_sma,
     weekly_trend_up,
@@ -321,6 +324,50 @@ class TestRangePct:
     def test_none_on_empty_close(self):
         empty = pd.Series(dtype=float)
         assert range_pct(empty, empty, empty, 5) is None
+
+
+class TestAdx:
+    def test_strong_directional_move_scores_high_with_dominant_plus_di(self):
+        rng = np.random.RandomState(1)
+        n = 200
+        noise = rng.normal(0, 1.2, n).cumsum() * 0.15
+        close = pd.Series(100 + np.linspace(0, 40, n) + noise)
+        high = close + np.abs(rng.normal(0.5, 0.3, n))
+        low = close - np.abs(rng.normal(0.5, 0.3, n))
+        adx_line, plus_di, minus_di = adx(high, low, close, 14)
+        assert adx_line.iloc[-1] > 25.0
+        assert plus_di.iloc[-1] > minus_di.iloc[-1]
+
+    def test_choppy_series_scores_low(self):
+        rng = np.random.RandomState(2)
+        n = 200
+        close = pd.Series(100 + rng.normal(0, 1, n).cumsum() * 0.02)
+        high, low = close + 0.5, close - 0.5
+        adx_line, _plus_di, _minus_di = adx(high, low, close, 14)
+        assert adx_line.iloc[-1] < 25.0
+
+    def test_needs_full_window(self):
+        close = pd.Series(np.linspace(100, 110, 10))
+        adx_line, _plus_di, _minus_di = adx(close + 1, close - 1, close, 14)
+        assert adx_line.isna().all()
+
+
+class TestSwingHighsLows:
+    def test_swing_highs_marks_local_peaks(self):
+        high = pd.Series([1, 2, 3, 4, 5, 4, 3, 2, 1, 2, 3, 4, 5, 4, 3, 2, 1], dtype=float)
+        mask = swing_highs(high, window=2)
+        assert list(mask[mask].index) == [4, 12]
+
+    def test_swing_lows_marks_local_troughs(self):
+        low = pd.Series([5, 4, 3, 2, 1, 2, 3, 4, 5, 4, 3, 2, 1, 2, 3, 4, 5], dtype=float)
+        mask = swing_lows(low, window=2)
+        assert list(mask[mask].index) == [4, 12]
+
+    def test_edges_can_never_qualify(self):
+        # A monotonically rising series has no interior peak within `window`
+        # bars of either edge -- nothing should ever fire.
+        high = pd.Series(np.linspace(1, 10, 20))
+        assert not swing_highs(high, window=3).any()
 
 
 class TestWeeklyTrendUp:

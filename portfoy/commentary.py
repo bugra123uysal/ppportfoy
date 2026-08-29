@@ -239,6 +239,43 @@ def movers_commentary(gainers: list, volume_spikes: list) -> str | None:
     return _ask(config.NEMOTRON_SUPER_MODEL, payload)
 
 
+def trend_commentary(sectors: list, stocks: list) -> str | None:
+    """Trend Bulucu -- en güçlü trendde sektörler + hisseler. Model, videonun
+    3 katmanını (yapı/MA/trendline) zaten mekanik olarak hesaplanmış skorlar
+    üzerinden anlatır, kendi trend/fiyat yorumu üretmez."""
+    top_sectors = sectors[:5]
+    top_stocks = stocks[:8]
+    if not top_sectors and not top_stocks:
+        return None
+    payload = {
+        "trendde_sektorler": [
+            {"sektor": s.sector, "yon": s.direction, "guc": s.strength}
+            for s in top_sectors
+        ],
+        "trendde_hisseler": [
+            {
+                "sembol": c.symbol,
+                "sektor": c.sector,
+                "yon": c.direction,
+                "guc": c.strength,
+                "ma_rejimi_teyit": c.ma_trend_confirmed,
+                "trendline_teyit": c.trendline_confirmed,
+                "hacim_teyit": c.volume_confirmed,
+                "para_akisi": c.money_flow_signal,
+                "para_akisi_uyumlu": c.money_flow_aligned,
+                "adx": c.adx,
+                "adx_yukseliyor": c.adx_rising,
+                "trend_olgunlugu": c.trend_maturity,
+                "rsi_diverjans_uyarisi": c.rsi_divergence_warning,
+                "trend_yasi_gun": c.trend_age_days,
+                "yeni_tetiklendi": c.newly_triggered,
+            }
+            for c in top_stocks
+        ],
+    }
+    return _ask(config.NEMOTRON_SUPER_MODEL, payload)
+
+
 def market_pulse_commentary(
     breadth: object | None,
     sentiment: object | None,
