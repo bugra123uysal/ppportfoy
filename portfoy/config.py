@@ -167,6 +167,115 @@ SECTOR_LEADER_STOCKS: dict[str, tuple[str, ...]] = {
 }
 SECTOR_LEADERS_TOP_N = 5
 
+# --- TradingView Tarama: S&P 500 + Nasdaq-100 tam evren --------------------
+# trend_trade_overlap.py'yi SECTOR_LEADER_STOCKS'un ~77 hissesi yerine bu
+# çok daha geniş evrende çalıştırmak için (kullanıcı isteği: "s&p500 ve
+# nasdaqdaki bütün hisseleri tarasın"). Kaynak: Wikipedia "List of S&P 500
+# companies" (GICS Sector sütunuyla) + Nasdaq-100 (Wikipedia navbox'ındaki
+# şirket adları, ticker'a yfinance Search API'siyle çözüldü). SECTOR_LEADER_
+# STOCKS gibi statik/elle bakımlı bir anlık görüntü -- endeks üyeliği zamanla
+# değişir (ekleme/çıkarma, birleşme, ticker değişimi) ve bu liste otomatik
+# güncellenmez. Tickerlar Yahoo notasyonunda (BRK-B, BF-B -- nokta değil
+# tire, aksi halde yfinance "delisted" sanıp veri döndürmüyor). "Nasdaq-100"
+# anahtarı, S&P 500'de olmayan Nasdaq-100 üyelerini tutar (bunlar için gerçek
+# GICS sektörü çözülmedi, tek grup olarak etiketlendi).
+SP500_NASDAQ100_STOCKS: dict[str, tuple[str, ...]] = {
+    "Teknoloji": (
+        "AAPL", "ACN", "ADBE", "ADI", "ADSK", "AKAM", "AMAT", "AMD",
+        "ANET", "APH", "AVGO", "CDNS", "CDW", "CIEN", "COHR", "CRM",
+        "CRWD", "CSCO", "CTSH", "DDOG", "DELL", "FFIV", "FICO", "FLEX",
+        "FSLR", "FTNT", "GDDY", "GEN", "GLW", "HPE", "HPQ", "IBM",
+        "INTC", "INTU", "IT", "JBL", "KEYS", "KLAC", "LITE", "LRCX",
+        "MCHP", "MPWR", "MRVL", "MSFT", "MSI", "MU", "NOW", "NTAP",
+        "NVDA", "NXPI", "ON", "ORCL", "PANW", "PLTR", "PTC", "Q",
+        "QCOM", "ROP", "SMCI", "SNDK", "SNPS", "STX", "SWKS", "TDY",
+        "TEL", "TER", "TRMB", "TXN", "TYL", "VRSN", "WDAY", "WDC",
+        "ZBRA",
+    ),
+    "Sağlık": (
+        "A", "ABBV", "ABT", "ALGN", "AMGN", "BAX", "BDX", "BIIB",
+        "BMY", "BSX", "CAH", "CI", "CNC", "COO", "COR", "CRL",
+        "CVS", "DGX", "DHR", "DVA", "DXCM", "ELV", "EW", "GEHC",
+        "GILD", "HCA", "HSIC", "HUM", "IDXX", "INCY", "IQV", "ISRG",
+        "JNJ", "LH", "LLY", "MCK", "MDT", "MRK", "MRNA", "MTD",
+        "PFE", "PODD", "REGN", "RMD", "RVTY", "SOLV", "STE", "SYK",
+        "TECH", "TMO", "UHS", "UNH", "VEEV", "VRTX", "VTRS", "WAT",
+        "WST", "ZBH", "ZTS",
+    ),
+    "Finans": (
+        "ACGL", "AFL", "AIG", "AIZ", "AJG", "ALL", "AMP", "AON",
+        "APO", "ARES", "AXP", "BAC", "BEN", "BLK", "BNY", "BRK-B",
+        "BRO", "BX", "C", "CB", "CBOE", "CFG", "CINF", "CME",
+        "COF", "COIN", "CPAY", "EG", "ERIE", "FDS", "FIS", "FISV",
+        "FITB", "GL", "GPN", "GS", "HBAN", "HIG", "HOOD", "IBKR",
+        "ICE", "IVZ", "JKHY", "JPM", "KEY", "KKR", "L", "MA",
+        "MCO", "MET", "MRSH", "MS", "MSCI", "MTB", "NDAQ", "NTRS",
+        "PFG", "PGR", "PNC", "PRU", "PYPL", "RF", "RJF", "SCHW",
+        "SPGI", "STT", "SYF", "TFC", "TROW", "TRV", "USB", "V",
+        "WFC", "WRB", "WTW", "XYZ",
+    ),
+    "İsteğe Bağlı Tüketim": (
+        "ABNB", "AMZN", "APTV", "AZO", "BBY", "BKNG", "CCL", "CMG",
+        "CVNA", "DASH", "DECK", "DHI", "DPZ", "DRI", "EBAY", "EXPE",
+        "F", "GM", "GPC", "GRMN", "HAS", "HD", "HLT", "LEN",
+        "LOW", "LULU", "LVS", "MAR", "MCD", "MGM", "NCLH", "NKE",
+        "NVR", "ORLY", "PHM", "RCL", "RL", "ROST", "SBUX", "TJX",
+        "TPR", "TSCO", "TSLA", "ULTA", "WSM", "WYNN", "YUM",
+    ),
+    "İletişim": (
+        "APP", "CHTR", "CMCSA", "DIS", "ECHO", "FOX", "FOXA", "GOOG",
+        "GOOGL", "LYV", "META", "NFLX", "NWS", "NWSA", "OMC", "PSKY",
+        "RDDT", "T", "TKO", "TMUS", "TTD", "TTWO", "VZ", "WBD",
+    ),
+    "Sanayi": (
+        "ADP", "ALLE", "AME", "AOS", "AXON", "BA", "BLDR", "BR",
+        "CARR", "CAT", "CHRW", "CMI", "CPRT", "CSX", "CTAS", "DAL",
+        "DD", "DE", "DOV", "EFX", "EME", "EMR", "ETN", "EXPD",
+        "FAST", "FDX", "FDXF", "FERG", "FIX", "FTV", "GD", "GE",
+        "GEV", "GNRC", "GWW", "HII", "HON", "HONA", "HUBB", "HWM",
+        "IEX", "IR", "ITW", "J", "JBHT", "JCI", "LDOS", "LHX",
+        "LII", "LMT", "LUV", "MAS", "MMM", "NDSN", "NOC", "NSC",
+        "ODFL", "OTIS", "PAYX", "PCAR", "PH", "PNR", "PWR", "ROK",
+        "ROL", "RSG", "RTX", "SNA", "SWK", "TDG", "TT", "TXT",
+        "UAL", "UBER", "UNP", "UPS", "URI", "VLTO", "VRSK", "VRT",
+        "WAB", "WM", "XYL",
+    ),
+    "Temel Tüketim": (
+        "ADM", "BF-B", "BG", "CASY", "CHD", "CL", "CLX", "COST",
+        "DG", "DLTR", "EL", "GIS", "HRL", "HSY", "KDP", "KHC",
+        "KMB", "KO", "KR", "KVUE", "MDLZ", "MKC", "MNST", "MO",
+        "PEP", "PG", "PM", "SJM", "STZ", "SYY", "TAP", "TGT",
+        "TSN", "WMT",
+    ),
+    "Enerji": (
+        "APA", "BKR", "COP", "CVX", "DVN", "EOG", "EQT", "EXE",
+        "FANG", "HAL", "KMI", "MPC", "OKE", "OXY", "PSX", "SLB",
+        "TPL", "TRGP", "VLO", "WMB", "XOM",
+    ),
+    "Kamu Hizmetleri": (
+        "AEE", "AEP", "AES", "ATO", "AWK", "CEG", "CMS", "CNP",
+        "D", "DTE", "DUK", "ED", "EIX", "ES", "ETR", "EVRG",
+        "EXC", "FE", "LNT", "NEE", "NI", "NRG", "PCG", "PEG",
+        "PNW", "PPL", "SO", "SRE", "VST", "WEC", "XEL",
+    ),
+    "Gayrimenkul": (
+        "AMT", "ARE", "BXP", "CBRE", "CCI", "CPT", "CSGP", "DLR",
+        "DOC", "EQIX", "ESS", "EXR", "FRT", "HST", "INVH", "IRM",
+        "KIM", "MAA", "O", "PLD", "PSA", "REG", "SBAC", "SPG",
+        "UDR", "VICI", "VMRK", "VTR", "WELL", "WY",
+    ),
+    "Hammadde": (
+        "ALB", "AMCR", "APD", "AVY", "BALL", "CF", "CRH", "CTVA",
+        "DOW", "ECL", "FCX", "IFF", "IP", "LIN", "LYB", "MLM",
+        "MOS", "NEM", "NUE", "PKG", "PPG", "SHW", "STLD", "SW",
+        "VMC",
+    ),
+    "Nasdaq-100": (
+        "ALAB", "ALNY", "ARM", "ASML", "CCEP", "CRWV", "FER", "MELI",
+        "MSTR", "NBIS", "PDD", "RKLB", "SHOP", "SPCX", "TRI",
+    ),
+}
+
 # --- My Trade: indicator screener -------------------------------------
 # Reuses SECTOR_LEADER_STOCKS (flattened, ticker -> sector) as the scan
 # universe, so results carry a sector label for free. Thresholds below are

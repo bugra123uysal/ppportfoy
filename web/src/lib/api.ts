@@ -244,6 +244,25 @@ export interface RotationOverlapPayload {
   commentary: string | null;
 }
 
+export interface TrendTradeCandidate {
+  symbol: string;
+  sector: string;
+  price: number;
+  change_1d: number;
+  direction: "boga" | "ayi";
+  trend_score: number;
+  trend_strength: "guclu" | "olusuyor" | "erken";
+  trade_groups: number[];
+  structural_stop: number | null;
+  suggested_stop: number | null;
+}
+
+export interface TrendTradeOverlapPayload {
+  candidates: TrendTradeCandidate[];
+  text_report: string;
+  commentary: string | null;
+}
+
 export interface FibLevel {
   ratio: number;
   price: number;
@@ -519,6 +538,13 @@ export function getRotationOverlap(): Promise<RotationOverlapPayload> {
 // slow to run on every page load, so this is button-triggered.
 export function getTrendScan(): Promise<TrendScanPayload> {
   return apiGet<TrendScanPayload>("/api/trend-scan");
+}
+
+// No revalidateSeconds: runs both the trend scan and the trade scan
+// server-side on every call -- button-triggered, same pattern as
+// rotation-overlap/trend-scan.
+export function getTrendTradeOverlap(): Promise<TrendTradeOverlapPayload> {
+  return apiGet<TrendTradeOverlapPayload>("/api/trend-trade-overlap");
 }
 
 export function getCalendar(days = 45): Promise<MarketEvent[]> {

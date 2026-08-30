@@ -25,6 +25,7 @@ from .commentary import (
     rotation_overlap_commentary,
     symbol_report_commentary,
     trend_commentary,
+    trend_trade_overlap_commentary,
     vcp_commentary,
 )
 from .data import AnalystView
@@ -42,6 +43,7 @@ from .rotation_overlap import build_rotation_overlap
 from .sentiment import SentimentScore, build_score
 from .trade_scan import build_trade_scan
 from .trend_scan import build_trend_scan
+from .trend_trade_overlap import build_trend_trade_overlap_scan, render_text_report
 from .vcp_scan import build_vcp_scan
 from .yield_curve import YieldCurveSnapshot, build_yield_curve_snapshot, credit_spread_proxy_change
 
@@ -154,6 +156,31 @@ def trend_scan_payload() -> dict:
         "sectors": sectors,
         "stocks": stocks,
         "commentary": trend_commentary(sectors, stocks),
+    }
+
+
+def _sp500_nasdaq100_universe() -> dict[str, str]:
+    """config.SP500_NASDAQ100_STOCKS flattened to ticker -> Turkish sector
+    label -- see that constant's docstring for sourcing/caveats."""
+    return {
+        stock: sector
+        for sector, stocks in config.SP500_NASDAQ100_STOCKS.items()
+        for stock in stocks
+    }
+
+
+def trend_trade_overlap_payload() -> dict:
+    """"TradingView Tarama" -- Trend Bulucu'nun piyasa yapısı adayları ile My
+    Trade'in indikatör taramasının aynı yönde (boğa+long / ayı+short)
+    kesiştiği hisseler, S&P 500 + Nasdaq-100 evreninde (~500 sembol, bkz.
+    config.SP500_NASDAQ100_STOCKS) -- SECTOR_LEADER_STOCKS'un ~77 hissesinden
+    çok daha geniş, bu yüzden bilerek button-tetiklemeli (page-load değil):
+    tek taramada ~25-40 saniye sürebilir."""
+    candidates = build_trend_trade_overlap_scan(_sp500_nasdaq100_universe())
+    return {
+        "candidates": candidates,
+        "text_report": render_text_report(candidates),
+        "commentary": trend_trade_overlap_commentary(candidates),
     }
 
 

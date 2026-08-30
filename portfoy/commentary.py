@@ -276,6 +276,27 @@ def trend_commentary(sectors: list, stocks: list) -> str | None:
     return _ask(config.NEMOTRON_SUPER_MODEL, payload)
 
 
+def trend_trade_overlap_commentary(candidates: list) -> str | None:
+    """TradingView Tarama -- Trend Bulucu'nun piyasa yapısı adayları ile My
+    Trade'in indikatör sinyallerinin aynı yönde kesiştiği hisseler. Model iki
+    bağımsız mekanik taramanın neden aynı sembolü işaret ettiğini anlatır."""
+    if not candidates:
+        return None
+    payload = {
+        "adaylar": [
+            {
+                "sembol": c.symbol,
+                "sektor": c.sector,
+                "yon": c.direction,
+                "trend_gucu": c.trend_strength,
+                "my_trade_gruplari": c.trade_groups,
+            }
+            for c in candidates[:8]
+        ]
+    }
+    return _ask(config.NEMOTRON_SUPER_MODEL, payload)
+
+
 def market_pulse_commentary(
     breadth: object | None,
     sentiment: object | None,

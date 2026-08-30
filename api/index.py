@@ -174,6 +174,11 @@ def trend_scan() -> Response:
     return _json_response(api_data.trend_scan_payload())
 
 
+@app.get("/api/trend-trade-overlap")
+def trend_trade_overlap() -> Response:
+    return _json_response(api_data.trend_trade_overlap_payload())
+
+
 @app.get("/api/options")
 def options_scan() -> Response:
     return _json_response(api_data.options_scan_payload())
