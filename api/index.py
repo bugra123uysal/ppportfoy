@@ -25,10 +25,9 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 from flask import Flask, Response, request  # noqa: E402
-from werkzeug.exceptions import HTTPException  # noqa: E402
+from werkzeug.exceptions import HTTPException, NotFound  # noqa: E402
 
-from portfoy import api_data, config, storage  # noqa: E402
-from portfoy import movers as movers_module  # noqa: E402
+from portfoy import api_data, config, data, storage  # noqa: E402
 from portfoy.security import ValidationError, normalize_symbol  # noqa: E402
 from portfoy.serialize import dumps  # noqa: E402
 
@@ -101,17 +100,40 @@ def add_position() -> Response:
         return unavailable
     body = request.get_json(silent=True) or {}
     try:
+        sym = _clean_symbol(body.get("symbol", ""))
+        # Format-valid but nonexistent tickers (typos) would otherwise
+        # persist silently and show up as a blank/NaN row everywhere else in
+        # the app -- reject them here, before they ever reach storage.
+        if not data.symbol_exists(sym):
+            raise _bad_request(f"Sembol bulunamadı / symbol not found: {sym}")
         new_position = storage.make_position(
-            body.get("symbol", ""),
-            body.get("quantity"),
-            body.get("avg_cost"),
-            body.get("notes", ""),
+            sym, body.get("quantity"), body.get("avg_cost"), body.get("notes", ""),
         )
         updated = storage.upsert_position(storage.load_portfolio(), new_position)
     except ValidationError as exc:
         raise _bad_request(str(exc)) from exc
     storage.save_portfolio(updated)
     return _json_response(api_data.positions_payload())
+
+
+@app.get("/api/quote/<symbol>")
+def quote(symbol: str) -> Response:
+    """Cheap live price lookup backing the add-position form's inline
+    "does this symbol exist" preview -- deliberately separate from the
+    stricter add_position guard above so a bad lookup never touches
+    storage."""
+    sym = _clean_symbol(symbol)
+    q = data.get_quotes((sym,)).get(sym)
+    if q is None:
+        raise NotFound(f"symbol not found: {sym}")
+    return _json_response(
+        {
+            "symbol": q.symbol,
+            "price": q.price,
+            "change_pct": q.change_pct,
+            "currency": storage.currency_for(sym),
+        }
+    )
 
 
 @app.delete("/api/positions/<symbol>")
@@ -141,42 +163,9 @@ def rotation() -> Response:
     return _json_response(api_data.rotation_payload(include_mine))
 
 
-@app.get("/api/trade-scan")
-def trade_scan() -> Response:
-    return _json_response(api_data.trade_scan_payload())
-
-
-@app.get("/api/money-flow")
-def money_flow() -> Response:
-    scope = request.args.get("scope", config.DEFAULT_MONEY_FLOW_SCOPE)
-    if scope not in config.MONEY_FLOW_SCOPES:
-        raise _bad_request(f"unknown scope: {scope!r}")
-    return _json_response(api_data.money_flow_payload(scope))
-
-
-@app.get("/api/fundamentals")
-def fundamentals() -> Response:
-    return _json_response(api_data.fundamental_scan_payload())
-
-
-@app.get("/api/vcp-scan")
-def vcp_scan() -> Response:
-    return _json_response(api_data.vcp_scan_payload())
-
-
-@app.get("/api/rotation-overlap")
-def rotation_overlap() -> Response:
-    return _json_response(api_data.rotation_overlap_payload())
-
-
-@app.get("/api/trend-scan")
-def trend_scan() -> Response:
-    return _json_response(api_data.trend_scan_payload())
-
-
-@app.get("/api/trend-trade-overlap")
-def trend_trade_overlap() -> Response:
-    return _json_response(api_data.trend_trade_overlap_payload())
+@app.get("/api/stage-analysis")
+def stage_analysis() -> Response:
+    return _json_response(api_data.stage_payload())
 
 
 @app.get("/api/options")
@@ -229,22 +218,6 @@ def calendar() -> Response:
     days = request.args.get("days", type=int) or config.CALENDAR_LOOKAHEAD_DAYS
     days = max(1, min(days, 365))
     return _json_response(api_data.calendar_payload(days))
-
-
-@app.get("/api/movers")
-def movers() -> Response:
-    return _json_response(api_data.movers_payload())
-
-
-@app.post("/api/movers/scan")
-def movers_scan() -> Response:
-    """Runs the (slow) live scan and persists it, unless the last snapshot is
-    still fresh (scan_if_due's own min-interval backstop) -- meant to be
-    triggered by an external scheduler (see
-    web/src/app/api/cron/movers-scan/route.ts), not by the page. Behind the
-    same PORTFOY_API_KEY gate as every other route here; the internal
-    service binding is the only way to reach it."""
-    return _json_response(movers_module.scan_if_due())
 
 
 @app.get("/api/news/<symbol>")

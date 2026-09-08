@@ -1,4 +1,4 @@
-"""My Trade sermaye akışı (money flow) scan.
+"""Sermaye akışı (money flow) sinyalleri, tek hisse bazında.
 
 Combines two free, complementary signals per stock:
 
@@ -64,11 +64,10 @@ def obv_trend(obv: pd.Series) -> str:
 
 
 def scan_symbol(symbol: str, sector: str, df: pd.DataFrame) -> MoneyFlowSignal | None:
-    """The part of `build_money_flow_scan` that doesn't fetch history -- pure
-    per-symbol scoring against an already-fetched frame (the ownership read
-    is still its own cached network call; it isn't part of `df`). Split out
-    so callers who already have `df` (position_health.py, reusing
-    `_load_metrics`'s history) don't need a second round trip.
+    """Pure per-symbol scoring against an already-fetched frame (the
+    ownership read is still its own cached network call; it isn't part of
+    `df`). Callers (report.py, position_health.py) already have `df` from
+    their own history fetch, so this never re-fetches OHLCV itself.
     """
     if df.empty or len(df) < config.CMF_PERIOD:
         return None
@@ -96,14 +95,3 @@ def scan_symbol(symbol: str, sector: str, df: pd.DataFrame) -> MoneyFlowSignal |
         institutional_pct=ownership.institutional_pct if ownership else None,
         insider_net_pct_6m=ownership.insider_net_pct_6m if ownership else None,
     )
-
-
-def build_money_flow_scan(universe: dict[str, str]) -> list[MoneyFlowSignal]:
-    """Scan `universe` (ticker -> sector label) for money-flow signals."""
-    histories = data.get_histories(tuple(universe), period=config.MONEY_FLOW_HISTORY_PERIOD)
-    results: list[MoneyFlowSignal] = []
-    for symbol, sector in universe.items():
-        signal = scan_symbol(symbol, sector, histories.get(symbol, pd.DataFrame()))
-        if signal is not None:
-            results.append(signal)
-    return results

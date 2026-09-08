@@ -139,34 +139,6 @@ def symbol_report_commentary(report: object, context: object | None) -> str | No
     return _ask(config.NEMOTRON_ULTRA_MODEL, payload, max_tokens=700)
 
 
-def money_flow_commentary(signals: list) -> str | None:
-    """Para Akışı / opportunity-scan aggregate commentary -- top 5
-    accumulation + top 5 distribution names, not the full universe (keeps
-    the prompt small and the read focused on what actually stands out)."""
-    accumulation = sorted(
-        (s for s in signals if s.cmf_signal == "accumulation"),
-        key=lambda s: s.cmf or 0.0,
-        reverse=True,
-    )[:5]
-    distribution = sorted(
-        (s for s in signals if s.cmf_signal == "distribution"),
-        key=lambda s: s.cmf or 0.0,
-    )[:5]
-    if not accumulation and not distribution:
-        return None
-    payload = {
-        "birikim_yapan_ust5": [
-            {"sembol": s.symbol, "sektor": s.sector, "cmf": s.cmf, "mfi": s.mfi, "obv": s.obv_trend}
-            for s in accumulation
-        ],
-        "dagitim_yapan_ust5": [
-            {"sembol": s.symbol, "sektor": s.sector, "cmf": s.cmf, "mfi": s.mfi, "obv": s.obv_trend}
-            for s in distribution
-        ],
-    }
-    return _ask(config.NEMOTRON_SUPER_MODEL, payload)
-
-
 def rotation_commentary(sectors: list) -> str | None:
     """Sector-rotation quadrant commentary -- teaches the RRG leading /
     improving / weakening / lagging cycle on top of the current snapshot."""
@@ -187,111 +159,26 @@ def rotation_commentary(sectors: list) -> str | None:
     return _ask(config.NEMOTRON_SUPER_MODEL, payload)
 
 
-def rotation_overlap_commentary(candidates: list) -> str | None:
-    if not candidates:
+def stage_commentary(stages: list) -> str | None:
+    """Evre Takibi -- portföydeki her pozisyonun Weinstein 4 evre okuması.
+    Model, evre geçişlerinin ve teknik bozukluk uyarılarının ne anlama
+    geldiğini zaten mekanik olarak hesaplanmış alanlar üzerinden anlatır."""
+    if not stages:
         return None
     payload = {
-        "adaylar": [
+        "pozisyonlar": [
             {
-                "sembol": c.symbol,
-                "sektor": c.sector,
-                "1a_getiri_pct": c.perf_1m,
-                "sinyaller": list(c.signals),
+                "sembol": s.symbol,
+                "evre": s.stage,
+                "trend": s.trend,
+                "evre_bu_hafta_degisti": s.stage_changed,
+                "sma30h_egim_pct": s.sma30w_slope_pct,
+                "fiyat_vs_sma_pct": s.price_vs_sma_pct,
+                "bu_evrede_hafta": s.weeks_in_stage,
+                "goreli_guc_trendi": s.relative_strength_trend,
+                "teknik_bozukluk": s.technical_alert,
             }
-            for c in candidates[:8]
-        ]
-    }
-    return _ask(config.NEMOTRON_SUPER_MODEL, payload)
-
-
-def vcp_commentary(candidates: list) -> str | None:
-    if not candidates:
-        return None
-    payload = {
-        "adaylar": [
-            {
-                "sembol": c.symbol,
-                "sektor": c.sector,
-                "3a_oncu_getiri_pct": c.trailing_return_pct,
-                "range_daralma_pct": c.range_contraction_pct,
-                "hacim_daralma_pct": c.volume_contraction_pct,
-                "zirveden_uzaklik_pct": c.pct_from_52w_high,
-            }
-            for c in candidates[:8]
-        ]
-    }
-    return _ask(config.NEMOTRON_SUPER_MODEL, payload)
-
-
-def movers_commentary(gainers: list, volume_spikes: list) -> str | None:
-    if not gainers and not volume_spikes:
-        return None
-    payload = {
-        "gunun_yukselenleri": [
-            {"sembol": m.symbol, "degisim_pct": m.change_pct, "goreli_hacim": m.relative_volume}
-            for m in gainers[:5]
-        ],
-        "hacim_sivrileri": [
-            {"sembol": m.symbol, "degisim_pct": m.change_pct, "goreli_hacim": m.relative_volume}
-            for m in volume_spikes[:5]
-        ],
-    }
-    return _ask(config.NEMOTRON_SUPER_MODEL, payload)
-
-
-def trend_commentary(sectors: list, stocks: list) -> str | None:
-    """Trend Bulucu -- en güçlü trendde sektörler + hisseler. Model, videonun
-    3 katmanını (yapı/MA/trendline) zaten mekanik olarak hesaplanmış skorlar
-    üzerinden anlatır, kendi trend/fiyat yorumu üretmez."""
-    top_sectors = sectors[:5]
-    top_stocks = stocks[:8]
-    if not top_sectors and not top_stocks:
-        return None
-    payload = {
-        "trendde_sektorler": [
-            {"sektor": s.sector, "yon": s.direction, "guc": s.strength}
-            for s in top_sectors
-        ],
-        "trendde_hisseler": [
-            {
-                "sembol": c.symbol,
-                "sektor": c.sector,
-                "yon": c.direction,
-                "guc": c.strength,
-                "ma_rejimi_teyit": c.ma_trend_confirmed,
-                "trendline_teyit": c.trendline_confirmed,
-                "hacim_teyit": c.volume_confirmed,
-                "para_akisi": c.money_flow_signal,
-                "para_akisi_uyumlu": c.money_flow_aligned,
-                "adx": c.adx,
-                "adx_yukseliyor": c.adx_rising,
-                "trend_olgunlugu": c.trend_maturity,
-                "rsi_diverjans_uyarisi": c.rsi_divergence_warning,
-                "trend_yasi_gun": c.trend_age_days,
-                "yeni_tetiklendi": c.newly_triggered,
-            }
-            for c in top_stocks
-        ],
-    }
-    return _ask(config.NEMOTRON_SUPER_MODEL, payload)
-
-
-def trend_trade_overlap_commentary(candidates: list) -> str | None:
-    """TradingView Tarama -- Trend Bulucu'nun piyasa yapısı adayları ile My
-    Trade'in indikatör sinyallerinin aynı yönde kesiştiği hisseler. Model iki
-    bağımsız mekanik taramanın neden aynı sembolü işaret ettiğini anlatır."""
-    if not candidates:
-        return None
-    payload = {
-        "adaylar": [
-            {
-                "sembol": c.symbol,
-                "sektor": c.sector,
-                "yon": c.direction,
-                "trend_gucu": c.trend_strength,
-                "my_trade_gruplari": c.trade_groups,
-            }
-            for c in candidates[:8]
+            for s in stages
         ]
     }
     return _ask(config.NEMOTRON_SUPER_MODEL, payload)

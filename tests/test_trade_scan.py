@@ -17,7 +17,7 @@ from portfoy.trade_scan import (
     _group4_buy_stochrsi_ema_median,
     _group4_sell_stochrsi_ema,
     _median_trend_up,
-    build_trade_scan,
+    scan_symbol,
 )
 
 N = 60
@@ -302,27 +302,17 @@ class TestGroup4SellStochRsiEma:
         assert _group4_sell_stochrsi_ema(df) is False
 
 
-class TestBuildTradeScan:
-    def test_skips_symbols_with_insufficient_history(self, monkeypatch):
-        monkeypatch.setattr(trade_scan.data, "get_histories", lambda symbols, period=None: {})
-        assert build_trade_scan({"AAA": "Test"}) == []
+class TestScanSymbol:
+    def test_insufficient_history_returns_empty(self):
+        assert scan_symbol("AAA", "Test", pd.DataFrame()) == []
 
-    def test_skips_symbols_matching_no_group(self, monkeypatch):
+    def test_no_group_matches_returns_empty(self):
         flat = _frame(np.full(N, 100.0).tolist())
-        monkeypatch.setattr(
-            trade_scan.data, "get_histories", lambda symbols, period=None: {"AAA": flat}
-        )
-        assert build_trade_scan({"AAA": "Test"}) == []
+        assert scan_symbol("AAA", "Test", flat) == []
 
-    def test_includes_and_labels_matching_symbols(self, monkeypatch):
-        histories = {
-            "AAA": _frame(_GROUP1_CLOSE, _GROUP1_OPEN, _GROUP1_VOLUME),
-            "BBB": _frame(np.full(N, 100.0).tolist()),
-        }
-        monkeypatch.setattr(
-            trade_scan.data, "get_histories", lambda symbols, period=None: histories
-        )
-        out = build_trade_scan({"AAA": "Enerji", "BBB": "Finans"})
+    def test_includes_and_labels_matching_symbols(self):
+        df = _frame(_GROUP1_CLOSE, _GROUP1_OPEN, _GROUP1_VOLUME)
+        out = scan_symbol("AAA", "Enerji", df)
         assert [s.symbol for s in out] == ["AAA"]
 
         signal = out[0]
@@ -335,9 +325,7 @@ class TestBuildTradeScan:
         assert signal.groups == [1, 3]
         assert signal.price == pytest.approx(125.0)
 
-        expected_atr = atr(
-            histories["AAA"]["High"], histories["AAA"]["Low"], histories["AAA"]["Close"], 14
-        ).iloc[-1]
+        expected_atr = atr(df["High"], df["Low"], df["Close"], 14).iloc[-1]
         assert signal.atr_14 == pytest.approx(expected_atr)
         assert signal.suggested_stop == pytest.approx(round(125.0 - expected_atr * 1.5, 2))
         assert signal.pct_from_52w_high is not None and signal.pct_from_52w_high <= 0
@@ -346,14 +334,9 @@ class TestBuildTradeScan:
         # so weekly resampling can't run -- None, not True/False.
         assert signal.weekly_trend_aligned is None
 
-    def test_includes_and_labels_short_signals(self, monkeypatch):
-        histories = {
-            "AAA": _frame(_GROUP1_SELL_CLOSE, _GROUP1_SELL_OPEN, _GROUP1_SELL_VOLUME),
-        }
-        monkeypatch.setattr(
-            trade_scan.data, "get_histories", lambda symbols, period=None: histories
-        )
-        out = build_trade_scan({"AAA": "Enerji"})
+    def test_includes_and_labels_short_signals(self):
+        df = _frame(_GROUP1_SELL_CLOSE, _GROUP1_SELL_OPEN, _GROUP1_SELL_VOLUME)
+        out = scan_symbol("AAA", "Enerji", df)
         assert [s.symbol for s in out] == ["AAA"]
 
         signal = out[0]
@@ -363,9 +346,7 @@ class TestBuildTradeScan:
         assert signal.groups == [1, 3]
         assert signal.price == pytest.approx(175.0)
 
-        expected_atr = atr(
-            histories["AAA"]["High"], histories["AAA"]["Low"], histories["AAA"]["Close"], 14
-        ).iloc[-1]
+        expected_atr = atr(df["High"], df["Low"], df["Close"], 14).iloc[-1]
         assert signal.suggested_stop == pytest.approx(round(175.0 + expected_atr * 1.5, 2))
 
     def test_symbol_can_produce_both_a_long_and_a_short_signal(self, monkeypatch):
@@ -375,10 +356,7 @@ class TestBuildTradeScan:
         # still surface as its own independent TradeSignal.
         df = _frame(_GROUP1_CLOSE, _GROUP1_OPEN, _GROUP1_VOLUME)
         monkeypatch.setattr(trade_scan, "_group2_sell_trend_deviation_stochrsi", lambda _df: True)
-        monkeypatch.setattr(
-            trade_scan.data, "get_histories", lambda symbols, period=None: {"AAA": df}
-        )
 
-        out = build_trade_scan({"AAA": "Enerji"})
+        out = scan_symbol("AAA", "Enerji", df)
         assert {s.direction for s in out} == {"long", "short"}
         assert len(out) == 2

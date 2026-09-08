@@ -1,34 +1,15 @@
-"""Fundamental valuation/quality/growth scan -- the "how would a fundamental
-analyst pick this stock" counterpart to trade_scan.py's technical setups and
-money_flow.py's volume/ownership signals.
+"""Fundamental valuation classification -- the "how would a fundamental
+analyst read this stock" counterpart to trade_scan.py's technical setups and
+money_flow.py's volume/ownership signals. Used by position_health.py (Risk
+& Uyarılar's per-holding read) against data.get_fundamentals's output.
 
-Combines two free, complementary reads per stock (data.get_fundamentals):
-valuation (P/E, PEG, EV/EBITDA) and quality/growth (revenue growth, margins,
-ROE, debt/equity, FCF yield). This is not a buy/sell signal -- see
-`classify_valuation`'s docstring for what the verdict does and doesn't mean.
+This is not a buy/sell signal -- see `classify_valuation`'s docstring for
+what the verdict does and doesn't mean.
 """
 
 from __future__ import annotations
 
-from dataclasses import dataclass
-
-from . import config, data
-
-
-@dataclass(frozen=True)
-class FundamentalSnapshot:
-    symbol: str
-    sector: str
-    pe: float | None
-    peg: float | None
-    ev_ebitda: float | None
-    revenue_growth: float | None
-    gross_margin: float | None
-    operating_margin: float | None
-    roe: float | None
-    debt_to_equity: float | None
-    fcf_yield: float | None
-    verdict: str    # "ucuz" | "makul" | "pahali" | "belirsiz"
+from . import config
 
 
 def classify_valuation(
@@ -74,30 +55,3 @@ def classify_valuation(
     if total > 0:
         return "ucuz"
     return "makul"
-
-
-def build_fundamental_scan(universe: dict[str, str]) -> list[FundamentalSnapshot]:
-    """Scan `universe` (ticker -> sector label) for fundamental metrics."""
-    results: list[FundamentalSnapshot] = []
-    for symbol, sector in universe.items():
-        m = data.get_fundamentals(symbol)
-        if m is None:
-            continue
-        verdict = classify_valuation(m.peg, m.ev_ebitda, m.revenue_growth, m.operating_margin)
-        results.append(
-            FundamentalSnapshot(
-                symbol=symbol,
-                sector=sector,
-                pe=m.pe,
-                peg=m.peg,
-                ev_ebitda=m.ev_ebitda,
-                revenue_growth=m.revenue_growth,
-                gross_margin=m.gross_margin,
-                operating_margin=m.operating_margin,
-                roe=m.roe,
-                debt_to_equity=m.debt_to_equity,
-                fcf_yield=m.fcf_yield,
-                verdict=verdict,
-            )
-        )
-    return results

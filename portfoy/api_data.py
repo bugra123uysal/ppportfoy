@@ -20,31 +20,20 @@ from .breadth import BreadthSnapshot, build_snapshot
 from .calendar_events import MarketEvent, upcoming_events
 from .commentary import (
     market_pulse_commentary,
-    money_flow_commentary,
     rotation_commentary,
-    rotation_overlap_commentary,
+    stage_commentary,
     symbol_report_commentary,
-    trend_commentary,
-    trend_trade_overlap_commentary,
-    vcp_commentary,
 )
 from .data import AnalystView
-from .fundamentals import build_fundamental_scan
 from .indicators import last_value, sma
-from .money_flow import build_money_flow_scan
-from .movers import MoversScan, build_movers_scan, load_snapshot
 from .options import OptionActivity, rank_by_volume
 from .performance import SeriesResult
 from .position_health import evaluate_portfolio
 from .report import SymbolContext, SymbolReport, build_report, build_symbol_context
 from .risk import PositionMetrics
 from .rotation import build_rotation, build_sector_leaders
-from .rotation_overlap import build_rotation_overlap
 from .sentiment import SentimentScore, build_score
-from .trade_scan import build_trade_scan
-from .trend_scan import build_trend_scan
-from .trend_trade_overlap import build_trend_trade_overlap_scan, render_text_report
-from .vcp_scan import build_vcp_scan
+from .stage_analysis import StageAnalysis, build_stage_scan
 from .yield_curve import YieldCurveSnapshot, build_yield_curve_snapshot, credit_spread_proxy_change
 
 
@@ -91,6 +80,22 @@ def portfolio_history_payload() -> list[dict]:
     return storage.load_history()
 
 
+def stage_payload() -> dict:
+    """Weinstein 4-stage read for every current holding (Evre Takibi) --
+    needs its own, longer history fetch (STAGE_ANALYSIS_PERIOD) since a
+    30-week SMA needs far more lead-in than the 1y default _load_metrics
+    fetches for live P&L."""
+    positions = storage.load_portfolio()
+    symbols = tuple(p.symbol for p in positions)
+    if not symbols:
+        return {"stages": [], "commentary": None}
+    histories = data.get_histories(symbols, config.STAGE_ANALYSIS_PERIOD)
+    bench_symbols = tuple(dict.fromkeys(config.STAGE_BENCHMARKS.values()))
+    benchmarks = data.get_histories(bench_symbols, config.STAGE_ANALYSIS_PERIOD)
+    stages: list[StageAnalysis] = build_stage_scan(list(symbols), histories, benchmarks)
+    return {"stages": stages, "commentary": stage_commentary(stages)}
+
+
 def _sector_and_leader_symbols() -> tuple[list[str], list[str]]:
     """(benchmark + sector ETF symbols, flattened leader-pool symbols) --
     the two symbol groups every rotation-scoring weekly-closes fetch needs.
@@ -126,119 +131,6 @@ def rotation_payload(include_mine: bool = False) -> dict:
         "leaders": leaders,
         "commentary": rotation_commentary(etf_sectors),
     }
-
-
-def _sector_leader_universe() -> dict[str, str]:
-    """SECTOR_LEADER_STOCKS flattened to ticker -> Turkish sector label."""
-    return {
-        stock: config.SECTOR_ETFS[sector_etf][0]
-        for sector_etf, stocks in config.SECTOR_LEADER_STOCKS.items()
-        for stock in stocks
-    }
-
-
-def trade_scan_payload() -> dict:
-    return {"signals": build_trade_scan(_sector_leader_universe())}
-
-
-def _sector_etf_universe() -> dict[str, str]:
-    """SECTOR_ETFS flattened to ticker -> Turkish label -- lets
-    trend_scan_payload apply the identical market-structure scan to the
-    sector ETFs themselves, so "hangi sektör trendde" uses the same
-    definition as "hangi hisse trendde" instead of a second methodology."""
-    return {etf: label_tr for etf, (label_tr, _label_en) in config.SECTOR_ETFS.items()}
-
-
-def trend_scan_payload() -> dict:
-    sectors = build_trend_scan(_sector_etf_universe())
-    stocks = build_trend_scan(_sector_leader_universe())
-    return {
-        "sectors": sectors,
-        "stocks": stocks,
-        "commentary": trend_commentary(sectors, stocks),
-    }
-
-
-def _sp500_nasdaq100_universe() -> dict[str, str]:
-    """config.SP500_NASDAQ100_STOCKS flattened to ticker -> Turkish sector
-    label -- see that constant's docstring for sourcing/caveats."""
-    return {
-        stock: sector
-        for sector, stocks in config.SP500_NASDAQ100_STOCKS.items()
-        for stock in stocks
-    }
-
-
-def trend_trade_overlap_payload() -> dict:
-    """"TradingView Tarama" -- Trend Bulucu'nun piyasa yapısı adayları ile My
-    Trade'in indikatör taramasının aynı yönde (boğa+long / ayı+short)
-    kesiştiği hisseler, S&P 500 + Nasdaq-100 evreninde (~500 sembol, bkz.
-    config.SP500_NASDAQ100_STOCKS) -- SECTOR_LEADER_STOCKS'un ~77 hissesinden
-    çok daha geniş, bu yüzden bilerek button-tetiklemeli (page-load değil):
-    tek taramada ~25-40 saniye sürebilir."""
-    candidates = build_trend_trade_overlap_scan(_sp500_nasdaq100_universe())
-    return {
-        "candidates": candidates,
-        "text_report": render_text_report(candidates),
-        "commentary": trend_trade_overlap_commentary(candidates),
-    }
-
-
-def _portfolio_universe() -> dict[str, str]:
-    """Portfolio holdings -> the generic "Portföyüm" bucket, always -- even
-    when a holding is also a sector leader. money_flow_payload's scope="both"
-    merge relies on this label winning over the sector-leader one on
-    collision ("this is mine" beats the generic sector tag)."""
-    return {p.symbol: "Portföyüm" for p in storage.load_portfolio()}
-
-
-def money_flow_payload(scope: str = config.DEFAULT_MONEY_FLOW_SCOPE) -> dict:
-    if scope == "portfolio":
-        universe = _portfolio_universe()
-    elif scope == "universe":
-        universe = _sector_leader_universe()
-    else:
-        # Portfolio labels win when a holding is also a sector leader --
-        # "this is mine" is the more useful read than the generic sector tag.
-        universe = {**_sector_leader_universe(), **_portfolio_universe()}
-    if not universe:
-        return {"signals": [], "commentary": None}
-    signals = build_money_flow_scan(universe)
-    return {"signals": signals, "commentary": money_flow_commentary(signals)}
-
-
-def fundamental_scan_payload() -> dict:
-    return {"signals": build_fundamental_scan(_sector_leader_universe())}
-
-
-def vcp_scan_payload() -> dict:
-    candidates = build_vcp_scan(_sector_leader_universe())
-    return {"candidates": candidates, "commentary": vcp_commentary(candidates)}
-
-
-def rotation_overlap_payload() -> dict:
-    """Sector-rotation candidates (top performers within a currently
-    leading/improving RRG sector) that My Trade's own scanners also flag
-    bullish -- runs all four scans (rotation + trade_scan + vcp + money_flow)
-    fresh on every call, same on-demand-scan pattern as the other My Trade
-    panels (button-triggered, not page-load: money_flow's per-symbol
-    ownership reads are too slow for that)."""
-    symbols, leader_symbols = _sector_and_leader_symbols()
-    closes = data.get_weekly_closes(tuple(dict.fromkeys([*symbols, *leader_symbols])))
-    if closes.empty:
-        return {"candidates": [], "commentary": None}
-    sectors = build_rotation(closes, dict(config.SECTOR_ETFS), reference=list(config.SECTOR_ETFS))
-    leaders = build_sector_leaders(closes, config.SECTOR_LEADER_STOCKS)
-
-    universe = _sector_leader_universe()
-    candidates = build_rotation_overlap(
-        sectors,
-        leaders,
-        build_trade_scan(universe),
-        build_vcp_scan(universe),
-        build_money_flow_scan(universe),
-    )
-    return {"candidates": candidates, "commentary": rotation_overlap_commentary(candidates)}
 
 
 def option_activity_payload(symbol: str) -> OptionActivity | None:
@@ -331,15 +223,6 @@ def calendar_payload(days: int = config.CALENDAR_LOOKAHEAD_DAYS) -> list[MarketE
         for p in positions if not p.symbol.endswith(".IS")
     }
     return upcoming_events(date.today(), earnings, days)
-
-
-def movers_payload() -> dict | MoversScan:
-    """The latest periodic movers scan (see api/index.py's /api/movers/scan,
-    triggered by an external scheduler). Falls back to a fresh, on-demand
-    scan when nothing has been persisted yet -- no Upstash configured, or
-    the very first request before any scan has ever run."""
-    snapshot = load_snapshot()
-    return snapshot if snapshot is not None else build_movers_scan()
 
 
 def report_payload(symbol: str) -> dict[str, SymbolReport | SymbolContext | str | None]:

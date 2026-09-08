@@ -1,7 +1,14 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
-import { addPosition, ApiMutationError, removePosition } from "@/lib/api";
+import {
+  addPosition,
+  ApiError,
+  ApiMutationError,
+  getSymbolQuote,
+  removePosition,
+  type SymbolQuote,
+} from "@/lib/api";
 
 export interface FormState {
   error: string | null;
@@ -50,4 +57,26 @@ export async function removePositionAction(symbol: string): Promise<FormState> {
   }
   revalidatePath("/pozisyonlar");
   return { error: null };
+}
+
+export interface QuoteState {
+  quote: SymbolQuote | null;
+  notFound: boolean;
+  error: string | null;
+}
+
+// Backs the add-position form's live "does this symbol exist" preview --
+// deliberately separate from addPositionAction's own (also server-side,
+// authoritative) existence check, so a slow/failed lookup here can never
+// block an otherwise-valid submission.
+export async function lookupSymbolAction(symbol: string): Promise<QuoteState> {
+  try {
+    const quote = await getSymbolQuote(symbol);
+    return { quote, notFound: false, error: null };
+  } catch (err) {
+    if (err instanceof ApiError && err.status === 404) {
+      return { quote: null, notFound: true, error: "Sembol bulunamadı" };
+    }
+    return { quote: null, notFound: false, error: "Fiyat bilgisi şu an alınamadı" };
+  }
 }

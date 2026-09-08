@@ -96,22 +96,10 @@ class TestRouteWiring:
         monkeypatch.setattr(api_index.api_data, "options_scan_payload", lambda: [])
         assert client.get("/api/options", headers=AUTH).status_code == 200
 
-    def test_fundamentals(self, client, monkeypatch):
-        monkeypatch.setattr(api_index.api_data, "fundamental_scan_payload", lambda: {"signals": []})
-        resp = client.get("/api/fundamentals", headers=AUTH)
-        assert resp.get_json() == {"signals": []}
-
-    def test_vcp_scan(self, client, monkeypatch):
-        monkeypatch.setattr(api_index.api_data, "vcp_scan_payload", lambda: {"candidates": []})
-        resp = client.get("/api/vcp-scan", headers=AUTH)
-        assert resp.get_json() == {"candidates": []}
-
-    def test_rotation_overlap(self, client, monkeypatch):
-        monkeypatch.setattr(
-            api_index.api_data, "rotation_overlap_payload", lambda: {"candidates": []}
-        )
-        resp = client.get("/api/rotation-overlap", headers=AUTH)
-        assert resp.get_json() == {"candidates": []}
+    def test_stage_analysis(self, client, monkeypatch):
+        monkeypatch.setattr(api_index.api_data, "stage_payload", lambda: {"stages": []})
+        resp = client.get("/api/stage-analysis", headers=AUTH)
+        assert resp.get_json() == {"stages": []}
 
     def test_option_activity_passes_normalized_symbol(self, client, monkeypatch):
         captured = {}
@@ -145,49 +133,11 @@ class TestRouteWiring:
         assert "report" in body
         assert "context" in body
 
-    def test_money_flow_defaults_to_universe_scope(self, client, monkeypatch):
-        captured = {}
-        monkeypatch.setattr(
-            api_index.api_data, "money_flow_payload",
-            lambda scope: captured.update(scope=scope) or {"signals": []},
-        )
-        client.get("/api/money-flow", headers=AUTH)
-        from portfoy import config
-        assert captured == {"scope": config.DEFAULT_MONEY_FLOW_SCOPE}
-
-    def test_money_flow_accepts_valid_scopes(self, client, monkeypatch):
-        monkeypatch.setattr(api_index.api_data, "money_flow_payload", lambda scope: {"signals": []})
-        for scope in ("universe", "portfolio", "both"):
-            resp = client.get(f"/api/money-flow?scope={scope}", headers=AUTH)
-            assert resp.status_code == 200
-
-    def test_money_flow_rejects_unknown_scope(self, client):
-        resp = client.get("/api/money-flow?scope=bogus", headers=AUTH)
-        assert resp.status_code == 400
-
     def test_market_breadth(self, client, monkeypatch):
         monkeypatch.setattr(api_index.api_data, "breadth_payload", lambda: None)
         resp = client.get("/api/market/breadth", headers=AUTH)
         assert resp.get_json() is None
         assert resp.status_code == 200
-
-    def test_movers(self, client, monkeypatch):
-        payload = {"generated_at": "2026-01-01T00:00:00+00:00", "gainers": [], "volume_spikes": []}
-        monkeypatch.setattr(api_index.api_data, "movers_payload", lambda: payload)
-        resp = client.get("/api/movers", headers=AUTH)
-        assert resp.get_json() == payload
-
-    def test_movers_scan_delegates_to_scan_if_due(self, client, monkeypatch):
-        from portfoy.movers import MoversScan
-
-        scan = MoversScan(generated_at="2026-01-01T00:00:00+00:00", gainers=[], volume_spikes=[])
-        monkeypatch.setattr(api_index.movers_module, "scan_if_due", lambda: scan)
-        resp = client.post("/api/movers/scan", headers=AUTH)
-        assert resp.status_code == 200
-        assert resp.get_json()["generated_at"] == "2026-01-01T00:00:00+00:00"
-
-    def test_movers_scan_requires_auth(self, client):
-        assert client.post("/api/movers/scan").status_code == 401
 
     def test_market_sentiment(self, client, monkeypatch):
         monkeypatch.setattr(api_index.api_data, "sentiment_payload", lambda: None)
@@ -299,12 +249,34 @@ class TestRouteWiring:
         monkeypatch.setattr(api_index.api_data, "compare_payload", lambda period, base: [])
         assert client.get("/api/compare?base=try", headers=AUTH).status_code == 200
 
+    def test_quote_returns_price_and_currency(self, client, monkeypatch):
+        from portfoy.data import Quote
+
+        monkeypatch.setattr(
+            api_index.data, "get_quotes", lambda symbols: {"AAPL": Quote("AAPL", 234.5, 230.0, 1.9)}
+        )
+        resp = client.get("/api/quote/aapl", headers=AUTH)
+        assert resp.status_code == 200
+        assert resp.get_json() == {
+            "symbol": "AAPL", "price": 234.5, "change_pct": 1.9, "currency": "USD",
+        }
+
+    def test_quote_is_404_for_unknown_symbol(self, client, monkeypatch):
+        monkeypatch.setattr(api_index.data, "get_quotes", lambda symbols: {})
+        resp = client.get("/api/quote/ZZZZZZ", headers=AUTH)
+        assert resp.status_code == 404
+
+    def test_quote_rejects_invalid_symbol(self, client):
+        resp = client.get("/api/quote/%3Cbad%3E", headers=AUTH)
+        assert resp.status_code == 400
+
 
 class TestAddPosition:
     def test_persists_and_returns_updated_positions(self, client, monkeypatch):
         captured = {}
         monkeypatch.setattr(api_index.storage, "can_persist", lambda: True)
         monkeypatch.setattr(api_index.storage, "load_portfolio", lambda: [])
+        monkeypatch.setattr(api_index.data, "symbol_exists", lambda sym: True)
         monkeypatch.setattr(
             api_index.storage, "make_position",
             lambda symbol, qty, cost, notes="": {"symbol": symbol},
@@ -344,6 +316,17 @@ class TestAddPosition:
     def test_missing_body_is_400(self, client, monkeypatch):
         monkeypatch.setattr(api_index.storage, "can_persist", lambda: True)
         resp = client.post("/api/positions", headers=AUTH)
+        assert resp.status_code == 400
+
+    def test_nonexistent_symbol_is_400(self, client, monkeypatch):
+        """A format-valid ticker Yahoo has never heard of (a typo) must be
+        rejected before it ever reaches storage."""
+        monkeypatch.setattr(api_index.storage, "can_persist", lambda: True)
+        monkeypatch.setattr(api_index.data, "symbol_exists", lambda sym: False)
+        resp = client.post(
+            "/api/positions", headers=AUTH,
+            json={"symbol": "ZZZZZZ", "quantity": 1, "avg_cost": 1},
+        )
         assert resp.status_code == 400
 
 

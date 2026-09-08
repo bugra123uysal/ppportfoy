@@ -13,11 +13,8 @@ import pytest
 
 from portfoy import api_data, config
 from portfoy.data import AnalystView, Quote
-from portfoy.money_flow import MoneyFlowSignal
 from portfoy.options import OptionActivity
 from portfoy.storage import CashHolding, Position
-from portfoy.trade_scan import TradeSignal
-from portfoy.vcp_scan import VcpCandidate
 
 AAPL = Position(symbol="AAPL", quantity=10.0, avg_cost=100.0, currency="USD",
                  added="2026-01-01", notes="")
@@ -106,6 +103,51 @@ class TestPortfolioHistoryPayload:
         ]
 
 
+class TestStagePayload:
+    def test_empty_portfolio_skips_history_fetch(self, monkeypatch):
+        monkeypatch.setattr(api_data.storage, "load_portfolio", lambda: [])
+
+        def _raise_if_called(symbols, period=None):
+            raise AssertionError("get_histories should not run for an empty portfolio")
+
+        monkeypatch.setattr(api_data.data, "get_histories", _raise_if_called)
+        assert api_data.stage_payload() == {"stages": [], "commentary": None}
+
+    def test_fetches_holdings_and_benchmarks_with_the_stage_period(self, monkeypatch):
+        captured = []
+        monkeypatch.setattr(api_data.storage, "load_portfolio", lambda: [AAPL, THYAO])
+
+        def fake_histories(symbols, period=None):
+            captured.append((set(symbols), period))
+            return {}
+
+        monkeypatch.setattr(api_data.data, "get_histories", fake_histories)
+        api_data.stage_payload()
+
+        holdings_call, benchmark_call = captured
+        assert holdings_call == ({"AAPL", "THYAO.IS"}, config.STAGE_ANALYSIS_PERIOD)
+        assert benchmark_call == (
+            set(config.STAGE_BENCHMARKS.values()), config.STAGE_ANALYSIS_PERIOD,
+        )
+
+    def test_commentary_is_wired_from_the_scan_result(self, monkeypatch):
+        uptrend = _history([100.0 + i * 0.5 for i in range(800)])
+        monkeypatch.setattr(api_data.storage, "load_portfolio", lambda: [AAPL])
+        monkeypatch.setattr(
+            api_data.data, "get_histories",
+            lambda symbols, period=None: {"AAPL": uptrend} if "AAPL" in symbols else {},
+        )
+        captured = {}
+        monkeypatch.setattr(
+            api_data, "stage_commentary",
+            lambda stages: captured.update(stages=stages) or "yorum",
+        )
+        out = api_data.stage_payload()
+        assert out["commentary"] == "yorum"
+        assert [s.symbol for s in out["stages"]] == ["AAPL"]
+        assert captured["stages"] == out["stages"]
+
+
 class TestRotationPayload:
     def test_empty_closes_returns_empty_shape(self, monkeypatch):
         monkeypatch.setattr(api_data.data, "get_weekly_closes", lambda symbols: pd.DataFrame())
@@ -135,202 +177,6 @@ class TestRotationPayload:
         out = api_data.rotation_payload()
         assert isinstance(out["sectors"], list)
         assert set(out["leaders"]) == set(config.SECTOR_LEADER_STOCKS)
-
-
-class TestRotationOverlapPayload:
-    def test_empty_closes_returns_empty_candidates(self, monkeypatch):
-        monkeypatch.setattr(api_data.data, "get_weekly_closes", lambda symbols: pd.DataFrame())
-        assert api_data.rotation_overlap_payload() == {"candidates": [], "commentary": None}
-
-    def test_runs_all_three_my_trade_scans_over_the_full_universe(self, monkeypatch):
-        idx = pd.date_range("2023-01-01", periods=160, freq="W")
-        symbols = [config.RRG_BENCHMARK, *config.SECTOR_ETFS]
-        leader_symbols = [s for stocks in config.SECTOR_LEADER_STOCKS.values() for s in stocks]
-        data_cols = {sym: pd.Series(range(160), index=idx, dtype=float) + 100.0
-                     for sym in dict.fromkeys([*symbols, *leader_symbols])}
-        closes = pd.DataFrame(data_cols)
-        monkeypatch.setattr(api_data.data, "get_weekly_closes", lambda syms: closes)
-
-        # Every symbol shares the identical price series above, so every
-        # sector lands in the same RRG quadrant and every XLK leader (AAPL,
-        # MSFT, NVDA -- the pool's first three, tied on perf so ranked by
-        # config order) is a rotation candidate. One real, distinguishable
-        # signal per scan (rather than all three returning []) proves each
-        # scan's result reaches build_rotation_overlap through the right
-        # positional argument -- a swap between two of the three would
-        # either surface the wrong signal label below or raise
-        # AttributeError (the three signal dataclasses don't share fields).
-        captured: dict[str, set] = {}
-
-        def fake_trade_scan(universe):
-            captured["trade_scan"] = set(universe)
-            return [TradeSignal(
-                symbol="AAPL", sector="Teknoloji", price=200.0, change_1d=1.0,
-                direction="long", groups=[1], atr_14=2.0, suggested_stop=195.0,
-                pct_from_52w_high=-5.0, pct_from_52w_low=20.0, weekly_trend_aligned=True,
-            )]
-
-        def fake_vcp_scan(universe):
-            captured["vcp"] = set(universe)
-            return [VcpCandidate(
-                symbol="MSFT", sector="Teknoloji", price=400.0, change_1d=1.0, adr_pct=4.0,
-                trailing_return_pct=20.0, range_contraction_pct=50.0,
-                volume_contraction_pct=60.0, pct_from_52w_high=-5.0, suggested_stop=390.0,
-            )]
-
-        def fake_money_flow_scan(universe):
-            captured["money_flow"] = set(universe)
-            return [MoneyFlowSignal(
-                symbol="NVDA", sector="Teknoloji", price=120.0, change_1d=1.0, currency="USD",
-                cmf=0.2, cmf_signal="accumulation", mfi=55.0, obv_trend="yukselis",
-                institutional_pct=80.0, insider_net_pct_6m=1.0,
-            )]
-
-        monkeypatch.setattr(api_data, "build_trade_scan", fake_trade_scan)
-        monkeypatch.setattr(api_data, "build_vcp_scan", fake_vcp_scan)
-        monkeypatch.setattr(api_data, "build_money_flow_scan", fake_money_flow_scan)
-        out = api_data.rotation_overlap_payload()
-
-        all_stocks = {s for stocks in config.SECTOR_LEADER_STOCKS.values() for s in stocks}
-        assert captured["trade_scan"] == all_stocks
-        assert captured["vcp"] == all_stocks
-        assert captured["money_flow"] == all_stocks
-
-        by_symbol = {c.symbol: c for c in out["candidates"]}
-        assert by_symbol["AAPL"].signals == ("trade_scan_long",)
-        assert by_symbol["MSFT"].signals == ("vcp",)
-        assert by_symbol["NVDA"].signals == ("money_flow_accumulation",)
-
-
-class TestTradeScanPayload:
-    def test_empty_history_yields_no_signals(self, monkeypatch):
-        monkeypatch.setattr(api_data.data, "get_histories", lambda symbols, period=None: {})
-        assert api_data.trade_scan_payload() == {"signals": []}
-
-    def test_universe_covers_every_sector_leader_stock(self, monkeypatch):
-        captured = {}
-
-        def fake_histories(symbols, period=None):
-            captured.update({sym: True for sym in symbols})
-            return {}
-
-        monkeypatch.setattr(api_data.data, "get_histories", fake_histories)
-        api_data.trade_scan_payload()
-        all_stocks = {s for stocks in config.SECTOR_LEADER_STOCKS.values() for s in stocks}
-        assert set(captured) == all_stocks
-
-
-class TestMoneyFlowPayload:
-    def test_empty_history_yields_no_signals(self, monkeypatch):
-        monkeypatch.setattr(api_data.data, "get_histories", lambda symbols, period=None: {})
-        assert api_data.money_flow_payload() == {"signals": [], "commentary": None}
-
-    def test_default_scope_covers_every_sector_leader_stock_only(self, monkeypatch):
-        """Regression guard: the unscoped call must stay side-effect identical
-        to before the scope param existed -- it must not read the real
-        portfolio file. storage.load_portfolio is spied to fail the test if
-        the default scope ever touches it."""
-        captured = {}
-
-        def fake_histories(symbols, period=None):
-            captured.update({sym: True for sym in symbols})
-            return {}
-
-        def _raise_if_called(path=config.PORTFOLIO_FILE):
-            raise AssertionError("default scope should not read the portfolio file")
-
-        monkeypatch.setattr(api_data.data, "get_histories", fake_histories)
-        monkeypatch.setattr(api_data.storage, "load_portfolio", _raise_if_called)
-        api_data.money_flow_payload()
-        all_stocks = {s for stocks in config.SECTOR_LEADER_STOCKS.values() for s in stocks}
-        assert set(captured) == all_stocks
-
-    def test_scope_universe_is_identical_to_default(self, monkeypatch):
-        captured = {}
-        monkeypatch.setattr(
-            api_data.data, "get_histories",
-            lambda symbols, period=None: captured.update({sym: True for sym in symbols}) or {},
-        )
-        api_data.money_flow_payload("universe")
-        all_stocks = {s for stocks in config.SECTOR_LEADER_STOCKS.values() for s in stocks}
-        assert set(captured) == all_stocks
-
-    def test_scope_portfolio_covers_only_holdings(self, monkeypatch):
-        captured = {}
-        monkeypatch.setattr(api_data.storage, "load_portfolio", lambda: [AAPL, THYAO])
-        monkeypatch.setattr(
-            api_data.data, "get_histories",
-            lambda symbols, period=None: captured.update({sym: True for sym in symbols}) or {},
-        )
-        api_data.money_flow_payload("portfolio")
-        assert set(captured) == {"AAPL", "THYAO.IS"}
-
-    def test_scope_portfolio_with_empty_portfolio_skips_history_fetch(self, monkeypatch):
-        monkeypatch.setattr(api_data.storage, "load_portfolio", lambda: [])
-
-        def _raise_if_called(symbols, period=None):
-            raise AssertionError("get_histories should not run for an empty universe")
-
-        monkeypatch.setattr(api_data.data, "get_histories", _raise_if_called)
-        assert api_data.money_flow_payload("portfolio") == {"signals": [], "commentary": None}
-
-    def test_scope_both_merges_and_portfolio_label_wins_on_collision(self, monkeypatch):
-        leader_symbol = next(iter(config.SECTOR_LEADER_STOCKS.values()))[0]
-        held_leader = Position(symbol=leader_symbol, quantity=1.0, avg_cost=1.0, currency="USD",
-                                added="2026-01-01", notes="")
-        monkeypatch.setattr(api_data.storage, "load_portfolio", lambda: [AAPL, held_leader])
-
-        captured = {}
-        monkeypatch.setattr(
-            api_data, "build_money_flow_scan",
-            lambda universe: captured.update(universe) or [],
-        )
-        api_data.money_flow_payload("both")
-
-        all_stocks = {s for stocks in config.SECTOR_LEADER_STOCKS.values() for s in stocks}
-        # AAPL (portfolio-only) plus every sector-leader stock -- no duplicate
-        # entries even though held_leader is in both sets.
-        assert set(captured) == all_stocks | {"AAPL"}
-        # held_leader's own sector-leader label loses to the portfolio bucket.
-        assert captured[leader_symbol] == "Portföyüm"
-
-    def test_commentary_is_wired_from_the_scan_result(self, monkeypatch):
-        """Proves money_flow_payload passes its own scan output into
-        money_flow_commentary (not a fresh/second scan) and surfaces the
-        result under "commentary" -- the wiring, not commentary.py's own
-        logic (covered in test_commentary.py)."""
-        signal = MoneyFlowSignal(
-            symbol="AAPL", sector="Teknoloji", price=200.0, change_1d=1.0, currency="USD",
-            cmf=0.3, cmf_signal="accumulation", mfi=70.0, obv_trend="yukselis",
-            institutional_pct=60.0, insider_net_pct_6m=1.0,
-        )
-        monkeypatch.setattr(api_data, "build_money_flow_scan", lambda universe: [signal])
-        captured = {}
-        monkeypatch.setattr(
-            api_data, "money_flow_commentary",
-            lambda signals: captured.update(signals=signals) or "yorum",
-        )
-        out = api_data.money_flow_payload("universe")
-        assert out["commentary"] == "yorum"
-        assert captured["signals"] == [signal]
-
-
-class TestFundamentalScanPayload:
-    def test_no_data_yields_no_signals(self, monkeypatch):
-        monkeypatch.setattr(api_data.data, "get_fundamentals", lambda sym: None)
-        assert api_data.fundamental_scan_payload() == {"signals": []}
-
-    def test_universe_covers_every_sector_leader_stock(self, monkeypatch):
-        captured = {}
-
-        def fake_fundamentals(sym):
-            captured[sym] = True
-            return None
-
-        monkeypatch.setattr(api_data.data, "get_fundamentals", fake_fundamentals)
-        api_data.fundamental_scan_payload()
-        all_stocks = {s for stocks in config.SECTOR_LEADER_STOCKS.values() for s in stocks}
-        assert set(captured) == all_stocks
 
 
 class TestOptionsPayloads:
@@ -488,44 +334,6 @@ class TestMarketPulsePayload:
             "breadth": sentinel_breadth, "sentiment": sentinel_sentiment,
             "yield_curve": sentinel_yield_curve, "macro": sentinel_macro,
         }
-
-
-class TestVcpScanPayload:
-    def test_empty_history_yields_no_candidates(self, monkeypatch):
-        monkeypatch.setattr(api_data.data, "get_histories", lambda symbols, period=None: {})
-        assert api_data.vcp_scan_payload() == {"candidates": [], "commentary": None}
-
-    def test_universe_covers_every_sector_leader_stock(self, monkeypatch):
-        captured = {}
-
-        def fake_histories(symbols, period=None):
-            captured.update({sym: True for sym in symbols})
-            return {}
-
-        monkeypatch.setattr(api_data.data, "get_histories", fake_histories)
-        api_data.vcp_scan_payload()
-        all_stocks = {s for stocks in config.SECTOR_LEADER_STOCKS.values() for s in stocks}
-        assert set(captured) == all_stocks
-
-
-def _unexpected_rescan():
-    raise AssertionError("build_movers_scan should not run when a snapshot is already persisted")
-
-
-class TestMoversPayload:
-    def test_returns_persisted_snapshot_without_rescanning(self, monkeypatch):
-        snapshot = {"generated_at": "2026-01-01T00:00:00+00:00", "gainers": [], "volume_spikes": []}
-        monkeypatch.setattr(api_data, "load_snapshot", lambda: snapshot)
-        monkeypatch.setattr(api_data, "build_movers_scan", _unexpected_rescan)
-        assert api_data.movers_payload() == snapshot
-
-    def test_falls_back_to_a_fresh_scan_when_nothing_persisted(self, monkeypatch):
-        from portfoy.movers import MoversScan
-
-        scan = MoversScan(generated_at="2026-01-01T00:00:00+00:00", gainers=[], volume_spikes=[])
-        monkeypatch.setattr(api_data, "load_snapshot", lambda: None)
-        monkeypatch.setattr(api_data, "build_movers_scan", lambda: scan)
-        assert api_data.movers_payload() is scan
 
 
 class TestNewsPayload:

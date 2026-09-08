@@ -2,12 +2,9 @@ import requests
 
 from portfoy import commentary, config
 from portfoy.breadth import BreadthSnapshot
-from portfoy.money_flow import MoneyFlowSignal
-from portfoy.movers import Mover
 from portfoy.rotation import SectorRotation
-from portfoy.rotation_overlap import OverlapCandidate
 from portfoy.sentiment import SentimentScore
-from portfoy.vcp_scan import VcpCandidate
+from portfoy.stage_analysis import StageAnalysis
 from portfoy.yield_curve import YieldCurveSnapshot
 
 
@@ -102,32 +99,11 @@ class TestWrappersSkipCallWhenNothingToSay:
     when its input carries nothing worth narrating, regardless of whether
     an API key is configured."""
 
-    def test_money_flow_empty_list(self, monkeypatch):
-        monkeypatch.setenv("NVIDIA_API_KEY", "test-key")
-        monkeypatch.setattr(commentary, "_ask", lambda *a, **k: (_ for _ in ()).throw(AssertionError))
-        assert commentary.money_flow_commentary([]) is None
-
-    def test_money_flow_all_neutral(self, monkeypatch):
-        monkeypatch.setenv("NVIDIA_API_KEY", "test-key")
-        monkeypatch.setattr(commentary, "_ask", lambda *a, **k: (_ for _ in ()).throw(AssertionError))
-        neutral = MoneyFlowSignal(
-            symbol="AAPL", sector="Teknoloji", price=200.0, change_1d=1.0, currency="USD",
-            cmf=0.0, cmf_signal="notr", mfi=50.0, obv_trend="yatay",
-            institutional_pct=None, insider_net_pct_6m=None,
-        )
-        assert commentary.money_flow_commentary([neutral]) is None
-
     def test_rotation_empty(self):
         assert commentary.rotation_commentary([]) is None
 
-    def test_rotation_overlap_empty(self):
-        assert commentary.rotation_overlap_commentary([]) is None
-
-    def test_vcp_empty(self):
-        assert commentary.vcp_commentary([]) is None
-
-    def test_movers_empty(self):
-        assert commentary.movers_commentary([], []) is None
+    def test_stage_empty(self):
+        assert commentary.stage_commentary([]) is None
 
     def test_market_pulse_all_none(self):
         assert commentary.market_pulse_commentary(None, None, None, []) is None
@@ -171,22 +147,24 @@ class TestWrappersCallTheRightModel:
         assert captured["payload"]["sembol"] == "AAPL"
         assert captured["payload"]["fibonacci"]["en_yakin_seviye"] == 0.5
 
-    def test_money_flow_uses_super_and_only_top_names(self, monkeypatch):
+    def test_stage_uses_super(self, monkeypatch):
         captured = {}
         monkeypatch.setattr(
             commentary, "_ask",
             lambda model, payload, **k: captured.update(model=model, payload=payload) or "yorum",
         )
-        accumulation = MoneyFlowSignal(
-            symbol="AAPL", sector="Teknoloji", price=200.0, change_1d=1.0, currency="USD",
-            cmf=0.3, cmf_signal="accumulation", mfi=70.0, obv_trend="yukselis",
-            institutional_pct=60.0, insider_net_pct_6m=1.0,
+        stage = StageAnalysis(
+            symbol="AAPL", stage=4, stage_label="Evre 4 - Düşüş", trend="dusus",
+            price=180.0, sma30w=200.0, sma30w_slope_pct=-2.0, price_vs_sma_pct=-10.0,
+            weeks_in_stage=3, stage_changed=False, relative_strength_trend="dusus",
+            pct_from_52w_high=-25.0, technical_alert=True,
+            summary_tr="AAPL: Evre 4 (düşüş) -- ...",
         )
-        result = commentary.money_flow_commentary([accumulation])
+        result = commentary.stage_commentary([stage])
         assert result == "yorum"
         assert captured["model"] == config.NEMOTRON_SUPER_MODEL
-        assert captured["payload"]["birikim_yapan_ust5"][0]["sembol"] == "AAPL"
-        assert captured["payload"]["dagitim_yapan_ust5"] == []
+        assert captured["payload"]["pozisyonlar"][0]["sembol"] == "AAPL"
+        assert captured["payload"]["pozisyonlar"][0]["teknik_bozukluk"] is True
 
     def test_rotation_uses_super(self, monkeypatch):
         captured = {}
@@ -201,30 +179,6 @@ class TestWrappersCallTheRightModel:
         )
         assert commentary.rotation_commentary([sector]) == "yorum"
         assert captured["model"] == config.NEMOTRON_SUPER_MODEL
-
-    def test_rotation_overlap_uses_super(self, monkeypatch):
-        monkeypatch.setattr(commentary, "_ask", lambda model, payload, **k: model)
-        candidate = OverlapCandidate(
-            symbol="AAPL", sector="Teknoloji", perf_1m=5.0, signals=("trade_scan_long",)
-        )
-        assert commentary.rotation_overlap_commentary([candidate]) == config.NEMOTRON_SUPER_MODEL
-
-    def test_vcp_uses_super(self, monkeypatch):
-        monkeypatch.setattr(commentary, "_ask", lambda model, payload, **k: model)
-        candidate = VcpCandidate(
-            symbol="AAPL", sector="Teknoloji", price=200.0, change_1d=1.0, adr_pct=4.0,
-            trailing_return_pct=20.0, range_contraction_pct=50.0, volume_contraction_pct=60.0,
-            pct_from_52w_high=-5.0, suggested_stop=190.0,
-        )
-        assert commentary.vcp_commentary([candidate]) == config.NEMOTRON_SUPER_MODEL
-
-    def test_movers_uses_super(self, monkeypatch):
-        monkeypatch.setattr(commentary, "_ask", lambda model, payload, **k: model)
-        mover = Mover(
-            symbol="AAPL", name="Apple", price=200.0, change_pct=8.0, volume=1_000_000,
-            avg_volume_3m=500_000, relative_volume=2.0, sector="Teknoloji", signals=[], news=[],
-        )
-        assert commentary.movers_commentary([mover], []) == config.NEMOTRON_SUPER_MODEL
 
     def test_market_pulse_uses_super(self, monkeypatch):
         monkeypatch.setattr(commentary, "_ask", lambda model, payload, **k: model)

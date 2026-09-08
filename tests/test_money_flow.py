@@ -4,12 +4,7 @@ import pytest
 
 from portfoy import money_flow
 from portfoy.data import OwnershipFlow
-from portfoy.money_flow import (
-    MoneyFlowSignal,
-    build_money_flow_scan,
-    cmf_signal,
-    obv_trend,
-)
+from portfoy.money_flow import MoneyFlowSignal, cmf_signal, obv_trend, scan_symbol
 
 N = 40
 
@@ -60,10 +55,9 @@ class TestObvTrend:
         assert obv_trend(obv) == "yatay"
 
 
-class TestBuildMoneyFlowScan:
-    def test_skips_symbols_with_insufficient_history(self, monkeypatch):
-        monkeypatch.setattr(money_flow.data, "get_histories", lambda symbols, period=None: {})
-        assert build_money_flow_scan({"AAA": "Test"}) == []
+class TestScanSymbol:
+    def test_insufficient_history_returns_none(self):
+        assert scan_symbol("AAA", "Test", pd.DataFrame()) is None
 
     def test_builds_signal_with_ownership_data(self, monkeypatch):
         close = np.array([100.0 + i * 0.5 for i in range(N)])
@@ -78,16 +72,11 @@ class TestBuildMoneyFlowScan:
             }
         )
         monkeypatch.setattr(
-            money_flow.data, "get_histories", lambda symbols, period=None: {"AAA": df}
-        )
-        monkeypatch.setattr(
             money_flow.data, "get_ownership_flow",
             lambda sym: OwnershipFlow(institutional_pct=62.5, insider_net_pct_6m=1.2),
         )
 
-        out = build_money_flow_scan({"AAA": "Enerji"})
-        assert len(out) == 1
-        signal = out[0]
+        signal = scan_symbol("AAA", "Enerji", df)
         assert isinstance(signal, MoneyFlowSignal)
         assert signal.symbol == "AAA"
         assert signal.sector == "Enerji"
@@ -101,40 +90,30 @@ class TestBuildMoneyFlowScan:
 
     def test_missing_ownership_data_yields_none_fields(self, monkeypatch):
         df = _frame([100.0] * N)
-        monkeypatch.setattr(
-            money_flow.data, "get_histories", lambda symbols, period=None: {"AAA": df}
-        )
         monkeypatch.setattr(money_flow.data, "get_ownership_flow", lambda sym: None)
 
-        out = build_money_flow_scan({"AAA": "Enerji"})
-        assert out[0].institutional_pct is None
-        assert out[0].insider_net_pct_6m is None
+        signal = scan_symbol("AAA", "Enerji", df)
+        assert signal.institutional_pct is None
+        assert signal.insider_net_pct_6m is None
 
     def test_us_symbol_currency_is_usd(self, monkeypatch):
         df = _frame([100.0] * N)
-        monkeypatch.setattr(
-            money_flow.data, "get_histories", lambda symbols, period=None: {"AAPL": df}
-        )
         monkeypatch.setattr(money_flow.data, "get_ownership_flow", lambda sym: None)
-        out = build_money_flow_scan({"AAPL": "Teknoloji"})
-        assert out[0].currency == "USD"
+        signal = scan_symbol("AAPL", "Teknoloji", df)
+        assert signal.currency == "USD"
 
     def test_bist_symbol_skips_ownership_call_and_is_try(self, monkeypatch):
         df = _frame([100.0] * N)
-        monkeypatch.setattr(
-            money_flow.data, "get_histories", lambda symbols, period=None: {"THYAO.IS": df}
-        )
 
         def _raise_if_called(symbol):
             raise AssertionError("get_ownership_flow should not be called for a BIST symbol")
 
         monkeypatch.setattr(money_flow.data, "get_ownership_flow", _raise_if_called)
 
-        out = build_money_flow_scan({"THYAO.IS": "Ulaştırma"})
-        assert len(out) == 1
-        assert out[0].currency == "TRY"
-        assert out[0].institutional_pct is None
-        assert out[0].insider_net_pct_6m is None
+        signal = scan_symbol("THYAO.IS", "Ulaştırma", df)
+        assert signal.currency == "TRY"
+        assert signal.institutional_pct is None
+        assert signal.insider_net_pct_6m is None
         # CMF/MFI/OBV are pure price/volume math -- still populated for BIST.
-        assert out[0].cmf is not None
-        assert out[0].mfi is not None
+        assert signal.cmf is not None
+        assert signal.mfi is not None

@@ -131,136 +131,33 @@ export interface RotationPayload {
   commentary: string | null;
 }
 
-export interface TradeSignal {
+export interface StageAnalysis {
   symbol: string;
-  sector: string;
+  stage: 1 | 2 | 3 | 4;
+  stage_label: string;
+  trend: "yukselis" | "dusus" | "yatay";
   price: number;
-  change_1d: number;
-  direction: "long" | "short";
-  groups: number[];
-  atr_14: number | null;
-  suggested_stop: number | null;
+  sma30w: number;
+  sma30w_slope_pct: number;
+  price_vs_sma_pct: number;
+  weeks_in_stage: number;
+  stage_changed: boolean;
+  relative_strength_trend: "yukselis" | "dusus" | "yatay" | null;
   pct_from_52w_high: number | null;
-  pct_from_52w_low: number | null;
-  weekly_trend_aligned: boolean | null;
+  technical_alert: boolean;
+  summary_tr: string;
 }
 
-export interface TradeScanPayload {
-  signals: TradeSignal[];
+export interface StageAnalysisPayload {
+  stages: StageAnalysis[];
+  commentary: string | null;
 }
 
-export interface MoneyFlowSignal {
+export interface SymbolQuote {
   symbol: string;
-  sector: string;
   price: number;
-  change_1d: number;
-  cmf: number | null;
-  cmf_signal: "accumulation" | "distribution" | "notr";
-  mfi: number | null;
-  obv_trend: "yukselis" | "dusus" | "yatay";
-  institutional_pct: number | null;
-  insider_net_pct_6m: number | null;
-}
-
-export interface MoneyFlowPayload {
-  signals: MoneyFlowSignal[];
-  commentary: string | null;
-}
-
-export interface FundamentalSnapshot {
-  symbol: string;
-  sector: string;
-  pe: number | null;
-  peg: number | null;
-  ev_ebitda: number | null;
-  revenue_growth: number | null;
-  gross_margin: number | null;
-  operating_margin: number | null;
-  roe: number | null;
-  debt_to_equity: number | null;
-  fcf_yield: number | null;
-  verdict: "ucuz" | "makul" | "pahali" | "belirsiz";
-}
-
-export interface FundamentalScanPayload {
-  signals: FundamentalSnapshot[];
-}
-
-export interface VcpCandidate {
-  symbol: string;
-  sector: string;
-  price: number;
-  change_1d: number;
-  adr_pct: number;
-  trailing_return_pct: number;
-  range_contraction_pct: number;
-  volume_contraction_pct: number;
-  pct_from_52w_high: number;
-  suggested_stop: number | null;
-}
-
-export interface VcpScanPayload {
-  candidates: VcpCandidate[];
-  commentary: string | null;
-}
-
-export interface TrendCandidate {
-  symbol: string;
-  sector: string;
-  price: number;
-  change_1d: number;
-  direction: "boga" | "ayi";
-  score: number;
-  strength: "guclu" | "olusuyor" | "erken";
-  ma_trend_confirmed: boolean;
-  trendline_confirmed: boolean | null;
-  structural_stop: number | null;
-  volume_confirmed: boolean;
-  money_flow_signal: "accumulation" | "distribution" | "notr";
-  money_flow_aligned: boolean;
-  adx: number | null;
-  adx_rising: boolean | null;
-  trend_maturity: "zayif" | "saglikli" | "tukenebilir" | "belirsiz";
-  rsi_divergence_warning: boolean;
-  trend_age_days: number;
-  newly_triggered: boolean;
-}
-
-export interface TrendScanPayload {
-  sectors: TrendCandidate[];
-  stocks: TrendCandidate[];
-  commentary: string | null;
-}
-
-export interface RotationOverlapCandidate {
-  symbol: string;
-  sector: string;
-  perf_1m: number;
-  signals: string[];
-}
-
-export interface RotationOverlapPayload {
-  candidates: RotationOverlapCandidate[];
-  commentary: string | null;
-}
-
-export interface TrendTradeCandidate {
-  symbol: string;
-  sector: string;
-  price: number;
-  change_1d: number;
-  direction: "boga" | "ayi";
-  trend_score: number;
-  trend_strength: "guclu" | "olusuyor" | "erken";
-  trade_groups: number[];
-  structural_stop: number | null;
-  suggested_stop: number | null;
-}
-
-export interface TrendTradeOverlapPayload {
-  candidates: TrendTradeCandidate[];
-  text_report: string;
-  commentary: string | null;
+  change_pct: number;
+  currency: "TRY" | "USD";
 }
 
 export interface FibLevel {
@@ -375,26 +272,6 @@ export interface OptionActivity {
   }>;
 }
 
-export interface Mover {
-  symbol: string;
-  name: string;
-  price: number;
-  change_pct: number;
-  volume: number | null;
-  avg_volume_3m: number | null;
-  relative_volume: number | null;
-  sector: string | null;
-  signals: TradeSignal[];
-  news: NewsItem[];
-}
-
-export interface MoversScan {
-  generated_at: string;
-  gainers: Mover[];
-  volume_spikes: Mover[];
-  commentary: string | null;
-}
-
 export interface NewsItem {
   symbol: string;
   title: string;
@@ -420,7 +297,7 @@ export interface AddPositionInput {
   notes?: string;
 }
 
-class ApiError extends Error {
+export class ApiError extends Error {
   constructor(
     public readonly path: string,
     public readonly status: number,
@@ -504,47 +381,10 @@ export function getRotation(includeMine = false): Promise<RotationPayload> {
   return apiGet<RotationPayload>(`/api/rotation?include_mine=${includeMine}`, 3600);
 }
 
-// No revalidateSeconds: this is triggered on demand by a button, not
-// rendered at page-load, so every click should get a fresh scan.
-export function getTradeScan(): Promise<TradeScanPayload> {
-  return apiGet<TradeScanPayload>("/api/trade-scan");
-}
-
-export function getMoneyFlow(): Promise<MoneyFlowPayload> {
-  return apiGet<MoneyFlowPayload>("/api/money-flow");
-}
-
-// No revalidateSeconds: same on-demand-scan pattern as trade scan/money flow
-// -- per-symbol Yahoo quote-summary reads are too slow to run on every page
-// load across the whole universe, so this is button-triggered.
-export function getFundamentals(): Promise<FundamentalScanPayload> {
-  return apiGet<FundamentalScanPayload>("/api/fundamentals");
-}
-
-// No revalidateSeconds: same on-demand-scan pattern as trade scan/money flow.
-export function getVcpScan(): Promise<VcpScanPayload> {
-  return apiGet<VcpScanPayload>("/api/vcp-scan");
-}
-
-// No revalidateSeconds: runs rotation + all three My Trade scans server-side
-// on every call (money_flow's per-symbol ownership reads are slow), so this
-// is button-triggered like the other My Trade panels, not page-load.
-export function getRotationOverlap(): Promise<RotationOverlapPayload> {
-  return apiGet<RotationOverlapPayload>("/api/rotation-overlap");
-}
-
-// No revalidateSeconds: same on-demand-scan pattern as VCP/trade-scan --
-// full-universe 1y history fetch + swing-point detection per symbol is too
-// slow to run on every page load, so this is button-triggered.
-export function getTrendScan(): Promise<TrendScanPayload> {
-  return apiGet<TrendScanPayload>("/api/trend-scan");
-}
-
-// No revalidateSeconds: runs both the trend scan and the trade scan
-// server-side on every call -- button-triggered, same pattern as
-// rotation-overlap/trend-scan.
-export function getTrendTradeOverlap(): Promise<TrendTradeOverlapPayload> {
-  return apiGet<TrendTradeOverlapPayload>("/api/trend-trade-overlap");
+// No revalidateSeconds: reflects the user's own live portfolio, same
+// no-store pattern as getPositions/getPortfolioSummary.
+export function getStageAnalysis(): Promise<StageAnalysisPayload> {
+  return apiGet<StageAnalysisPayload>("/api/stage-analysis");
 }
 
 export function getCalendar(days = 45): Promise<MarketEvent[]> {
@@ -559,17 +399,15 @@ export function getNews(symbol: string, lang = "tr"): Promise<NewsItem[]> {
   return apiGet<NewsItem[]>(`/api/news/${encodeURIComponent(symbol)}?lang=${lang}`, 900);
 }
 
-// No revalidateSeconds -- on-demand, one symbol at a time, same pattern as
-// getTradeScan/getVcpScan.
+// No revalidateSeconds -- on-demand, one symbol at a time.
 export function getSymbolReport(symbol: string): Promise<SymbolReportPayload> {
   return apiGet<SymbolReportPayload>(`/api/report/${encodeURIComponent(symbol)}`);
 }
 
-// The backend itself only refreshes every ~20min (see the movers-scan cron
-// workflow), so caching this window at the fetch layer costs no real
-// freshness -- just skips a round trip on repeat navigation.
-export function getMovers(): Promise<MoversScan> {
-  return apiGet<MoversScan>("/api/movers", 300);
+// No revalidateSeconds -- backs the add-position form's live "does this
+// symbol exist" preview, so every keystroke-driven lookup must be fresh.
+export function getSymbolQuote(symbol: string): Promise<SymbolQuote> {
+  return apiGet<SymbolQuote>(`/api/quote/${encodeURIComponent(symbol)}`);
 }
 
 export function getCompare(period: string, base: "TRY" | "USD"): Promise<SeriesResult[]> {

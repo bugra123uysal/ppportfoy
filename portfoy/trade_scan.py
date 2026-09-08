@@ -1,4 +1,8 @@
-"""My Trade indicator screener -- Group 1-4, each usable long or short.
+"""Indicator screener -- Group 1-4, each usable long or short.
+
+Per-symbol only (`scan_symbol`) -- used by report.py (Hisse Raporu) and
+position_health.py (Risk & Uyarılar's per-holding read). There is no
+universe-wide scan here anymore.
 
 Four independent "setups" (source: user-provided course notes, see the
 per-group breakdown below). Each setup is a chain of same-direction
@@ -63,7 +67,7 @@ from dataclasses import dataclass
 
 import pandas as pd
 
-from . import config, data
+from . import config
 from .indicators import (
     atr,
     bollinger_bands,
@@ -259,11 +263,9 @@ def _atr_last(df: pd.DataFrame) -> float | None:
 
 
 def scan_symbol(symbol: str, sector: str, df: pd.DataFrame) -> list[TradeSignal]:
-    """The part of `build_trade_scan` that doesn't fetch -- pure per-symbol
-    scoring against an already-fetched history. Split out so callers who
-    already have `df` (e.g. position_health.py, scoring the user's own
-    holdings from the same history `_load_metrics` already fetched) don't
-    need a second network round trip just to reuse this logic.
+    """Pure per-symbol scoring against an already-fetched history. Callers
+    (report.py, position_health.py) already have `df` from their own
+    history fetch, so this never re-fetches OHLCV itself.
 
     A symbol can independently qualify long, short, or (the four setups
     check different indicators) both at once; each direction that matches
@@ -342,13 +344,4 @@ def scan_symbol(symbol: str, sector: str, df: pd.DataFrame) -> list[TradeSignal]
                 weekly_trend_aligned=(None if weekly_up is None else not weekly_up),
             )
         )
-    return results
-
-
-def build_trade_scan(universe: dict[str, str]) -> list[TradeSignal]:
-    """Scan `universe` (ticker -> sector label) and group matches by setup."""
-    histories = data.get_histories(tuple(universe), period=config.TRADE_SCAN_HISTORY_PERIOD)
-    results: list[TradeSignal] = []
-    for symbol, sector in universe.items():
-        results.extend(scan_symbol(symbol, sector, histories.get(symbol, pd.DataFrame())))
     return results
